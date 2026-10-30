@@ -57,19 +57,21 @@
 ## Dataset Structure
 
 - Impresso article ID or way to find the source of the statement
-- Original statement (in original language and unalterted)
+- Original statement (in original language and unalterted), start-end char
 - Date of the statement
-- Original Author(s) of the statement
+- (Original Author(s) of the statement, hard to do)
 - Source of the statement (newspaper, report from other media)
-- Topics of the statement (can be multiple, but as little as possible)
 - Resulting statement after pre-processing:
     - Translated to English
     - Converted relative times (next year > 2021, yesterday >February 18th)
     - Convert context ("The war" > "The wark against Ukraine")
-    - Break multi-statements into different ones (ranking lists into ordinal, combinational statements)
 - Time horizon of prediction (2 days, 1 year, etc) in days (0.3 days for hours)
 - Category of prediction
 - Predicted outcome (format determined by the category)
+
+- Break multi-statements into different ones (ranking lists into ordinal, combinational statements)
+- Topics of the statement (can be multiple, but as little as possible)
+
 - Actual result (format determined by the category), with confidence?
 - Source of actual result (link)
 - Accuracy of the prediction (metric detemined by the category)
