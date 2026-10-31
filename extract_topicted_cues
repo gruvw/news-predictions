@@ -1,18 +1,16 @@
-"""Step 1 (v2) - Topic-targeted prediction candidates from Impresso.
+"""Step 1 (v3) - Topic-targeted prediction candidates from Impresso (FR/DE/EN).
 
-Strategy
---------
-For each topic (Swiss votes, sport, elections) and language, search Impresso for
-domain-specific predictive phrases. Keep a sentence only if:
-  1. it contains the cue,
-  2. a topic anchor appears in the sentence or its immediate context,
-  3. it contains no retrospective marker ("comme prévu", "wie erwartet"...),
-  4. its verifiability score reaches MIN_SCORE.
-Candidates are balanced across topics and ranked by verifiability score.
+For each topic (votes, sport, elections) and language, search Impresso for
+domain-specific predictive phrases, then filter and score the sentences.
+
+Outputs:
+    prediction_candidates_v3.csv   kept candidates
+    rejected_candidates.csv        rejected sentences + reason (for tuning)
+    cue_stats.csv                  yield of each cue (for tuning)
 
 Usage:
     pip install impresso
-    python extract_candidates_v2.py
+    python extract_candidates_v3.py
 """
 
 import csv
@@ -24,21 +22,26 @@ from impresso import DateRange, connect
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
+TEST_MODE = True                # True = quick run to tune cues/anchors
 TARGET = 200                    # total candidates to export
-MAX_ARTICLES_PER_CUE = 40       # safety cap per cue
-MIN_SCORE = 3                   # minimum verifiability score
+MAX_ARTICLES_PER_CUE = 10 if TEST_MODE else 40
+ANCHOR_MODE = "bonus"           # "required" | "bonus" | "off"
+MIN_SCORE = 2                   # minimum verifiability score
 DATE_RANGE = None               # e.g. DateRange("1900-01-01", "1999-12-31")
-SLEEP = 0.5                     # pause between API calls (rate limiting)
-OUTPUT = "prediction_candidates_v2.csv"
+SLEEP = 0.5                     # pause between API pages (rate limiting)
+
+OUTPUT = "prediction_candidates_v3.csv"
+REJECTED_OUTPUT = "rejected_candidates.csv"
+STATS_OUTPUT = "cue_stats.csv"
 
 # ----------------------------------------------------------------------------
-# Topic definitions: predictive cues (used as search queries) + anchors
+# Topics: predictive cues (search queries) + anchors (topic confirmation)
 # ----------------------------------------------------------------------------
 TOPICS = {
-    "swiss_vote": {
+    "vote": {
         "outcome_type": "binary_vote",
-        "source_hint": "https://swissvotes.ch",
-        "share": 0.45,          # proportion of TARGET for this topic
+        "source_hint": "https://swissvotes.ch / national referendum records",
+        "share": 0.40,
         "cues": {
             "fr": ["sera acceptée", "sera rejetée", "sera repoussée", "sera adoptée",
                    "le peuple acceptera", "le peuple rejettera", "le oui l'emportera",
@@ -51,17 +54,23 @@ TOPICS = {
                    "dürfte abgelehnt werden", "dürfte verworfen werden",
                    "wird durchfallen", "wird wahrscheinlich angenommen",
                    "wird wahrscheinlich abgelehnt"],
+            "en": ["will be carried", "will be defeated", "will be rejected",
+                   "will be approved", "is certain to pass", "is likely to pass",
+                   "is likely to be rejected", "is likely to be defeated",
+                   "the referendum will"],
         },
         "anchors": {
             "fr": ["votation", "initiative", "référendum", "referendum", "scrutin",
                    "peuple et les cantons", "souverain", "urnes", "électeurs"],
             "de": ["abstimmung", "volksinitiative", "initiative", "referendum",
                    "urnengang", "volk und stände", "stimmbürger", "souverän", "urne"],
+            "en": ["referendum", "vote", "ballot", "poll", "voters", "electors",
+                   "plebiscite", "initiative", "amendment"],
         },
     },
     "sport": {
         "outcome_type": "winner_or_score",
-        "source_hint": "Wikipedia / archives des fédérations",
+        "source_hint": "Wikipedia / federation archives",
         "share": 0.30,
         "cues": {
             "fr": ["partira favori", "est le grand favori", "devrait l'emporter",
@@ -70,30 +79,40 @@ TOPICS = {
             "de": ["gilt als Favorit", "ist der grosse Favorit", "dürfte gewinnen",
                    "wird gewinnen", "wird siegen", "dürfte siegen",
                    "ist der Sieg kaum zu nehmen"],
+            "en": ["is the favourite to win", "is the favorite to win",
+                   "is expected to win the", "should win the", "will win the",
+                   "is tipped to win", "are favourites to win", "are favorites to win"],
         },
         "anchors": {
             "fr": ["match", "finale", "championnat", "coupe", "tour de france",
                    "jeux olympiques", "étape", "course", "équipe", "coureur"],
             "de": ["spiel", "final", "meisterschaft", "cup", "rennen", "olympische",
                    "etappe", "mannschaft", "fahrer", "match"],
+            "en": ["match", "final", "championship", "cup", "race", "olympic",
+                   "team", "game", "tournament", "league", "derby"],
         },
     },
     "election": {
         "outcome_type": "elected_or_seats",
-        "source_hint": "admin.ch / OFS / Wikipedia",
-        "share": 0.25,
+        "source_hint": "admin.ch / OFS / Wikipedia / national election records",
+        "share": 0.30,
         "cues": {
             "fr": ["sera élu", "sera réélu", "devrait être élu", "sera battu",
                    "obtiendra la majorité", "gagnera des sièges", "perdra des sièges"],
             "de": ["wird gewählt werden", "dürfte gewählt werden", "wird wiedergewählt",
                    "dürfte wiedergewählt werden", "wird Sitze gewinnen",
                    "wird Sitze verlieren"],
+            "en": ["will be elected", "will be re-elected", "will be returned",
+                   "is expected to win", "will carry the", "will win a majority",
+                   "will lose seats", "will gain seats", "is sure to be elected"],
         },
         "anchors": {
             "fr": ["élection", "conseil fédéral", "conseil national", "conseil des états",
                    "candidat", "scrutin", "siège", "parti"],
             "de": ["wahl", "bundesrat", "nationalrat", "ständerat", "kandidat",
                    "wahlen", "sitz", "partei"],
+            "en": ["election", "candidate", "parliament", "congress", "president",
+                   "seats", "party", "majority", "constituency", "governor", "senate"],
         },
     },
 }
@@ -104,10 +123,12 @@ RETROSPECTIVE = {
            "ainsi qu'on l'avait prévu", "a été acceptée", "a été rejetée", "a été élu"],
     "de": ["wie erwartet", "wie vorausgesagt", "wie vorauszusehen war",
            "wurde angenommen", "wurde abgelehnt", "wurde gewählt"],
+    "en": ["as expected", "as predicted", "as anticipated", "was elected",
+           "was defeated", "was rejected", "was carried", "has been elected"],
 }
 
-# Signals that make an outcome checkable
-NUMBER_RE = re.compile(r"\d+\s*(%|pour\s*cent|prozent)|\d+\s*[-:à]\s*\d+|\d{2,}", re.I)
+NUMBER_RE = re.compile(
+    r"\d+\s*(%|pour\s*cent|prozent|per\s*cent|percent)|\d+\s*[-:à]\s*\d+|\d{2,}", re.I)
 DATE_WORDS = {
     "fr": ["dimanche", "demain", "prochain", "prochaine", "samedi", "janvier",
            "février", "mars", "avril", "mai", "juin", "juillet", "août",
@@ -115,27 +136,37 @@ DATE_WORDS = {
     "de": ["sonntag", "morgen", "nächsten", "kommenden", "samstag", "januar",
            "februar", "märz", "april", "mai", "juni", "juli", "august",
            "september", "oktober", "november", "dezember"],
+    "en": ["sunday", "saturday", "tomorrow", "next week", "next month", "january",
+           "february", "march", "april", "may", "june", "july", "august",
+           "september", "october", "november", "december"],
 }
 VAGUE = {
     "fr": ["peut-être", "il se pourrait", "qui sait", "on ne sait"],
     "de": ["vielleicht", "möglicherweise", "wer weiss", "man weiss nicht"],
+    "en": ["perhaps", "who knows", "it is possible that", "might possibly"],
 }
 
 COLUMNS = [
-    "candidate_id", "impresso_id", "publication_date", "newspaper", "language",  # step 1
-    "topic", "cue", "outcome_type", "verifiability_score", "source_hint",        # step 1
-    "statement_original", "context_original",                                    # step 1
-    "author", "category", "statement_en",                                        # step 2
-    "resolution_date", "horizon_days", "predicted_value",                        # step 2
-    "actual_value", "outcome_confidence", "outcome_source_url",                  # step 3
-    "accuracy",                                                                  # step 3
+    "candidate_id", "impresso_id", "publication_date", "newspaper", "language",
+    "topic", "cue", "outcome_type", "anchor_level", "verifiability_score",
+    "source_hint", "statement_original", "context_original",
+    "author", "category", "statement_en",                          # step 2
+    "resolution_date", "horizon_days", "predicted_value",          # step 2
+    "actual_value", "outcome_confidence", "outcome_source_url",    # step 3
+    "accuracy",                                                    # step 3
 ]
+REJECTED_COLUMNS = ["impresso_id", "publication_date", "language", "topic", "cue",
+                    "reason", "anchor_level", "verifiability_score",
+                    "statement_original"]
+STATS_COLUMNS = ["topic", "language", "cue", "articles_scanned", "sentences_matched",
+                 "kept", "rej_length", "rej_duplicate", "rej_retrospective",
+                 "rej_no_anchor", "rej_low_score"]
 
 # ----------------------------------------------------------------------------
 # Text helpers
 # ----------------------------------------------------------------------------
 def normalize(text):
-    text = text.replace("’", "'").replace("ß", "ss")   # Swiss German spelling
+    text = text.replace("’", "'").replace("ß", "ss")
     text = re.sub(r"-\s+(?=[a-zäöüéèà])", "", text)    # OCR line-break hyphens
     return re.sub(r"\s+", " ", text).strip()
 
@@ -151,7 +182,7 @@ def full_text(impresso, item):
     try:
         raw = impresso.content_items.get(item["id"]).raw
         return (raw.get("text") or {}).get("content") or ""
-    except Exception as e:                       # network / missing item
+    except Exception as e:
         print(f"  ! could not fetch {item.get('id')}: {e}")
         return ""
 
@@ -161,36 +192,47 @@ def contains_any(text, words):
     return any(w.lower() in low for w in words)
 
 
-def verifiability_score(sent, context, topic, lang):
-    """Heuristic score: higher = more likely a checkable prediction."""
+def anchor_level(sent, context, topic, lang):
+    """2 = anchor in sentence, 1 = in context, 0 = none."""
     anchors = TOPICS[topic]["anchors"][lang]
-    score = 0
     if contains_any(sent, anchors):
-        score += 2
-    elif contains_any(context, anchors):
-        score += 1
+        return 2
+    if contains_any(context, anchors):
+        return 1
+    return 0
+
+
+def verifiability_score(sent, lang, a_level):
+    score = 0
+    if ANCHOR_MODE != "off":
+        score += a_level
     if NUMBER_RE.search(sent):
         score += 1
     if contains_any(sent, DATE_WORDS[lang]):
         score += 1
-    # proper noun after the first word (only meaningful in French: German
-    # capitalises all nouns)
-    if lang == "fr" and re.search(r"(?<!^)(?<![.!?] )\b[A-ZÉÈ][a-zéèêàç]{2,}", sent):
+    # proper noun not at sentence start (useless in German: all nouns capitalised)
+    if lang in ("fr", "en") and re.search(r"(?<=[a-zéèàç,;] )[A-ZÉÈ][a-zéèêàç]{2,}", sent):
         score += 1
     if contains_any(sent, VAGUE[lang]):
         score -= 2
     return score
 
 # ----------------------------------------------------------------------------
-# Main
+# Collection
 # ----------------------------------------------------------------------------
-def collect_topic(impresso, topic, quota, seen):
+def collect_topic(impresso, topic, quota, seen, rejected, stats):
     conf = TOPICS[topic]
     found = []
     cues = [(lang, c) for lang, lst in conf["cues"].items() for c in lst]
 
     for lang, cue in cues:
+        st = {"topic": topic, "language": lang, "cue": cue, "articles_scanned": 0,
+              "sentences_matched": 0, "kept": 0, "rej_length": 0,
+              "rej_duplicate": 0, "rej_retrospective": 0, "rej_no_anchor": 0,
+              "rej_low_score": 0}
+        stats.append(st)
         pattern = re.compile(re.escape(normalize(cue)), re.IGNORECASE)
+
         try:
             result = impresso.search.find(term=f'"{cue}"', language=lang,
                                           with_text_contents=True,
@@ -199,73 +241,110 @@ def collect_topic(impresso, topic, quota, seen):
             print(f"  ! search failed for {cue!r}: {e}")
             continue
 
-        scanned, kept = 0, 0
-        for page in result.pages():
-            for item in page.raw["data"]:
-                scanned += 1
-                sents = sentences(full_text(impresso, item))
-                for k, sent in enumerate(sents):
-                    if not pattern.search(sent):
-                        continue
-                    if not (40 <= len(sent) <= 600) or sent.lower() in seen:
-                        continue
-                    context = " ".join(sents[max(k - 2, 0):k + 3])
-                    if contains_any(sent, RETROSPECTIVE[lang]):
-                        continue
-                    score = verifiability_score(sent, context, topic, lang)
-                    if score < MIN_SCORE:
-                        continue
-                    seen.add(sent.lower())
+        done = False
+        try:
+            for page in result.pages():
+                for item in page.raw["data"]:
+                    st["articles_scanned"] += 1
                     meta = item.get("meta") or {}
-                    found.append({
-                        "impresso_id": item["id"],
-                        "publication_date": str(meta.get("date", ""))[:10],
-                        "newspaper": meta.get("mediaTitle") or meta.get("mediaId", ""),
-                        "language": lang,
-                        "topic": topic,
-                        "cue": cue,
-                        "outcome_type": conf["outcome_type"],
-                        "verifiability_score": score,
-                        "source_hint": conf["source_hint"],
-                        "statement_original": sent,
-                        "context_original": context,
-                    })
-                    kept += 1
-                    break                # one statement per article: more diversity
-                if scanned >= MAX_ARTICLES_PER_CUE:
-                    break
-            if scanned >= MAX_ARTICLES_PER_CUE:
-                break
-            time.sleep(SLEEP)
-        print(f"  [{topic}/{lang}] {cue!r}: +{kept} ({scanned} articles scanned)")
+                    date = str(meta.get("date", ""))[:10]
+                    sents = sentences(full_text(impresso, item))
 
-    # keep the best-scored candidates for this topic
+                    for k, sent in enumerate(sents):
+                        if not pattern.search(sent):
+                            continue
+                        st["sentences_matched"] += 1
+                        context = " ".join(sents[max(k - 2, 0):k + 3])
+                        a_lvl = anchor_level(sent, context, topic, lang)
+                        score = verifiability_score(sent, lang, a_lvl)
+
+                        reason = None
+                        if not (40 <= len(sent) <= 600):
+                            reason = "length"
+                        elif sent.lower() in seen:
+                            reason = "duplicate"
+                        elif contains_any(sent, RETROSPECTIVE[lang]):
+                            reason = "retrospective"
+                        elif ANCHOR_MODE == "required" and a_lvl == 0:
+                            reason = "no_anchor"
+                        elif score < MIN_SCORE:
+                            reason = "low_score"
+
+                        if reason:
+                            st[f"rej_{reason}"] += 1
+                            if reason != "duplicate":
+                                rejected.append({
+                                    "impresso_id": item["id"], "publication_date": date,
+                                    "language": lang, "topic": topic, "cue": cue,
+                                    "reason": reason, "anchor_level": a_lvl,
+                                    "verifiability_score": score,
+                                    "statement_original": sent})
+                            continue
+
+                        seen.add(sent.lower())
+                        found.append({
+                            "impresso_id": item["id"],
+                            "publication_date": date,
+                            "newspaper": meta.get("mediaTitle") or meta.get("mediaId", ""),
+                            "language": lang, "topic": topic, "cue": cue,
+                            "outcome_type": conf["outcome_type"],
+                            "anchor_level": a_lvl,
+                            "verifiability_score": score,
+                            "source_hint": conf["source_hint"],
+                            "statement_original": sent,
+                            "context_original": context,
+                        })
+                        st["kept"] += 1
+                        break            # one statement per article
+
+                    if st["articles_scanned"] >= MAX_ARTICLES_PER_CUE:
+                        done = True
+                        break
+                if done:
+                    break
+                time.sleep(SLEEP)
+        except Exception as e:
+            print(f"  ! paging failed for {cue!r}: {e}")
+
+        print(f"  [{topic}/{lang}] {cue!r}: kept {st['kept']} / "
+              f"{st['sentences_matched']} matches ({st['articles_scanned']} articles)")
+
     found.sort(key=lambda r: r["verifiability_score"], reverse=True)
     return found[:quota]
 
 
+def write_csv(path, columns, rows):
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:   # -sig: Excel-friendly
+        writer = csv.DictWriter(f, fieldnames=columns, restval="", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main():
+    print(f"TEST_MODE={TEST_MODE}  ANCHOR_MODE={ANCHOR_MODE}  MIN_SCORE={MIN_SCORE}")
     impresso = connect()
-    seen, rows = set(), []
+    seen, rows, rejected, stats = set(), [], [], []
 
     for topic, conf in TOPICS.items():
         quota = round(TARGET * conf["share"])
-        print(f"== {topic} (quota {quota}) ==")
-        rows.extend(collect_topic(impresso, topic, quota, seen))
+        print(f"\n== {topic} (quota {quota}) ==")
+        rows.extend(collect_topic(impresso, topic, quota, seen, rejected, stats))
 
     rows.sort(key=lambda r: (r["topic"], r["publication_date"]))
     for i, r in enumerate(rows, 1):
         r["candidate_id"] = f"C{i:05d}"
 
-    with open(OUTPUT, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=COLUMNS, restval="")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(OUTPUT, COLUMNS, rows)
+    write_csv(REJECTED_OUTPUT, REJECTED_COLUMNS, rejected)
+    write_csv(STATS_OUTPUT, STATS_COLUMNS, stats)
 
     print(f"\nWrote {len(rows)} candidates to {OUTPUT}")
     for topic in TOPICS:
-        n = sum(r["topic"] == topic for r in rows)
-        print(f"  {topic}: {n}")
+        for lang in ("fr", "de", "en"):
+            n = sum(r["topic"] == topic and r["language"] == lang for r in rows)
+            print(f"  {topic}/{lang}: {n}")
+    print(f"Rejected sentences logged: {len(rejected)} -> {REJECTED_OUTPUT}")
+    print(f"Per-cue statistics -> {STATS_OUTPUT}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,79 @@
+﻿topic,language,cue,articles_scanned,sentences_matched,kept,rej_length,rej_duplicate,rej_retrospective,rej_no_anchor,rej_low_score
+vote,fr,sera acceptée,10,0,0,0,0,0,0,0
+vote,fr,sera rejetée,10,0,0,0,0,0,0,0
+vote,fr,sera repoussée,10,0,0,0,0,0,0,0
+vote,fr,sera adoptée,10,0,0,0,0,0,0,0
+vote,fr,le peuple acceptera,10,5,2,0,0,0,0,3
+vote,fr,le peuple rejettera,10,9,0,0,0,0,0,9
+vote,fr,le oui l'emportera,10,5,3,1,0,0,0,1
+vote,fr,le non l'emportera,10,5,1,1,0,0,0,3
+vote,fr,l'initiative passera,10,5,5,0,0,0,0,0
+vote,fr,a de bonnes chances d'être acceptée,10,9,4,0,2,0,0,3
+vote,fr,sera probablement rejetée,10,2,0,0,0,1,0,1
+vote,fr,sera probablement acceptée,10,0,0,0,0,0,0,0
+vote,fr,sera sans doute rejetée,10,3,1,1,0,0,0,1
+vote,fr,sera sans doute acceptée,10,1,0,0,0,0,0,1
+vote,de,wird angenommen werden,10,0,0,0,0,0,0,0
+vote,de,wird abgelehnt werden,10,0,0,0,0,0,0,0
+vote,de,wird verworfen werden,10,0,0,0,0,0,0,0
+vote,de,dürfte angenommen werden,10,6,0,0,0,0,0,6
+vote,de,dürfte abgelehnt werden,10,3,0,0,0,0,0,3
+vote,de,dürfte verworfen werden,5,2,0,0,0,0,0,2
+vote,de,wird durchfallen,10,0,0,0,0,0,0,0
+vote,de,wird wahrscheinlich angenommen,10,1,0,0,0,0,0,1
+vote,de,wird wahrscheinlich abgelehnt,10,1,0,0,0,0,0,1
+vote,en,will be carried,10,0,0,0,0,0,0,0
+vote,en,will be defeated,10,0,0,0,0,0,0,0
+vote,en,will be rejected,10,0,0,0,0,0,0,0
+vote,en,will be approved,10,0,0,0,0,0,0,0
+vote,en,is certain to pass,0,0,0,0,0,0,0,0
+vote,en,is likely to pass,1,0,0,0,0,0,0,0
+vote,en,is likely to be rejected,0,0,0,0,0,0,0,0
+vote,en,is likely to be defeated,0,0,0,0,0,0,0,0
+vote,en,the referendum will,10,0,0,0,0,0,0,0
+sport,fr,partira favori,10,10,9,1,0,0,0,0
+sport,fr,est le grand favori,10,8,4,1,0,0,0,3
+sport,fr,devrait l'emporter,10,10,3,1,0,0,0,6
+sport,fr,devrait remporter,10,10,7,0,0,0,0,3
+sport,fr,s'imposera,10,3,1,0,0,0,0,2
+sport,fr,remportera,10,10,2,0,0,0,0,8
+sport,fr,gagnera le,10,4,3,0,0,0,0,1
+sport,fr,les pronostics donnent,10,8,2,0,0,0,0,6
+sport,fr,a toutes les chances de gagner,10,10,3,0,0,0,0,7
+sport,de,gilt als Favorit,10,10,2,0,0,0,0,8
+sport,de,ist der grosse Favorit,10,1,0,0,0,0,0,1
+sport,de,dürfte gewinnen,10,5,1,0,0,0,0,4
+sport,de,wird gewinnen,10,0,0,0,0,0,0,0
+sport,de,wird siegen,10,0,0,0,0,0,0,0
+sport,de,dürfte siegen,10,0,0,0,0,0,0,0
+sport,de,ist der Sieg kaum zu nehmen,10,0,0,0,0,0,0,0
+sport,en,is the favourite to win,0,0,0,0,0,0,0,0
+sport,en,is the favorite to win,0,0,0,0,0,0,0,0
+sport,en,is expected to win the,1,0,0,0,0,0,0,0
+sport,en,should win the,0,0,0,0,0,0,0,0
+sport,en,will win the,10,0,0,0,0,0,0,0
+sport,en,is tipped to win,0,0,0,0,0,0,0,0
+sport,en,are favourites to win,0,0,0,0,0,0,0,0
+sport,en,are favorites to win,0,0,0,0,0,0,0,0
+election,fr,sera élu,10,0,0,0,0,0,0,0
+election,fr,sera réélu,10,0,0,0,0,0,0,0
+election,fr,devrait être élu,10,10,7,0,0,0,0,3
+election,fr,sera battu,10,0,0,0,0,0,0,0
+election,fr,obtiendra la majorité,10,6,4,0,0,0,0,2
+election,fr,gagnera des sièges,10,3,3,0,0,0,0,0
+election,fr,perdra des sièges,10,2,2,0,0,0,0,0
+election,de,wird gewählt werden,10,0,0,0,0,0,0,0
+election,de,dürfte gewählt werden,10,1,0,0,0,0,0,1
+election,de,wird wiedergewählt,10,0,0,0,0,0,0,0
+election,de,dürfte wiedergewählt werden,5,1,1,0,0,0,0,0
+election,de,wird Sitze gewinnen,10,0,0,0,0,0,0,0
+election,de,wird Sitze verlieren,10,0,0,0,0,0,0,0
+election,en,will be elected,10,0,0,0,0,0,0,0
+election,en,will be re-elected,4,0,0,0,0,0,0,0
+election,en,will be returned,10,1,0,0,0,0,0,1
+election,en,is expected to win,1,0,0,0,0,0,0,0
+election,en,will carry the,10,0,0,0,0,0,0,0
+election,en,will win a majority,0,0,0,0,0,0,0,0
+election,en,will lose seats,0,0,0,0,0,0,0,0
+election,en,will gain seats,0,0,0,0,0,0,0,0
+election,en,is sure to be elected,0,0,0,0,0,0,0,0
