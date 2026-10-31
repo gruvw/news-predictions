@@ -23,18 +23,18 @@ from impresso import DateRange, connect
 # Parameters
 # ----------------------------------------------------------------------------
 TEST_MODE = True                # True = quick run to tune cues/anchors
-TARGET = 200                    # total candidates to export
+TARGET = 350                    # total candidates to export
 MAX_ARTICLES_PER_CUE = 10 if TEST_MODE else 40
 ANCHOR_MODE = "bonus"           # "required" | "bonus" | "off"
 MIN_SCORE = 2                   # minimum verifiability score
 DATE_RANGE = None               # e.g. DateRange("1900-01-01", "1999-12-31")
 SLEEP = 0.5                     # pause between API pages (rate limiting)
 
-OUTPUT = "prediction_candidates_v3.csv"
-REJECTED_OUTPUT = "rejected_candidates.csv"
+OUTPUT = "prediction_candidates_v6.csv"
+REJECTED_OUTPUT = "rejected_candidates_v6.csv"
 STATS_OUTPUT = "cue_stats.csv"
 
-# ----------------------------------------------------------------------------
+# -----------------------------------------------------------a-----------------
 # Topics: predictive cues (search queries) + anchors (topic confirmation)
 # ----------------------------------------------------------------------------
 TOPICS = {
@@ -73,7 +73,7 @@ TOPICS = {
         "source_hint": "Wikipedia / federation archives",
         "share": 0.30,
         "cues": {
-            "fr": ["partira favori", "est le grand favori", "devrait l'emporter",
+            "fr": ["devrait l'emporter",
                    "devrait remporter", "s'imposera", "remportera", "gagnera le",
                    "les pronostics donnent", "a toutes les chances de gagner"],
             "de": ["gilt als Favorit", "ist der grosse Favorit", "dürfte gewinnen",

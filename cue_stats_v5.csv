@@ -1,0 +1,258 @@
+﻿topic,language,cue,articles_scanned,sentences_matched,kept,rej_length,rej_duplicate,rej_retrospective,rej_static_state,rej_no_anchor,rej_low_score
+vote,fr,sera acceptée,10,0,0,0,0,0,0,0,0
+vote,fr,sera rejetée,10,0,0,0,0,0,0,0,0
+vote,fr,sera repoussée,10,0,0,0,0,0,0,0,0
+vote,fr,sera adoptée,10,0,0,0,0,0,0,0,0
+vote,fr,sera plébiscitée,10,0,0,0,0,0,0,0,0
+vote,fr,sera balayée,10,0,0,0,0,0,0,0,0
+vote,fr,sera enterrée,10,0,0,0,0,0,0,0,0
+vote,fr,le peuple acceptera,10,5,3,0,0,0,0,0,2
+vote,fr,le peuple rejettera,10,9,5,0,0,0,0,0,4
+vote,fr,le oui l'emportera,10,5,4,1,0,0,0,0,0
+vote,fr,le non l'emportera,10,5,4,1,0,0,0,0,0
+vote,fr,le oui passera,10,0,0,0,0,0,0,0,0
+vote,fr,le non passera,3,0,0,0,0,0,0,0,0
+vote,fr,fait peu de doute que le oui,0,0,0,0,0,0,0,0,0
+vote,fr,fait peu de doute que le non,2,1,0,0,1,0,0,0,0
+vote,fr,l'initiative passera,10,5,5,0,0,0,0,0,0
+vote,fr,l'initiative sera rejetée,10,0,0,0,0,0,0,0,0
+vote,fr,passera la rampe,10,10,5,0,1,0,0,0,4
+vote,fr,ne passera pas la rampe,10,5,1,0,0,0,0,0,4
+vote,fr,a de bonnes chances d'être acceptée,10,9,7,0,2,0,0,0,0
+vote,fr,a de bonnes chances d'être rejetée,0,0,0,0,0,0,0,0,0
+vote,fr,sera probablement rejetée,10,2,1,0,0,1,0,0,0
+vote,fr,sera probablement acceptée,10,0,0,0,0,0,0,0,0
+vote,fr,sera sans doute rejetée,10,3,2,1,0,0,0,0,0
+vote,fr,sera sans doute acceptée,10,1,0,0,0,0,0,0,1
+vote,fr,sera vraisemblablement rejetée,10,1,1,0,0,0,0,0,0
+vote,fr,sera vraisemblablement acceptée,10,1,1,0,0,0,0,0,0
+vote,fr,n'a aucune chance d'être acceptée,10,6,5,0,0,0,0,0,1
+vote,de,wird angenommen werden,10,0,0,0,0,0,0,0,0
+vote,de,wird abgelehnt werden,10,0,0,0,0,0,0,0,0
+vote,de,wird verworfen werden,10,0,0,0,0,0,0,0,0
+vote,de,dürfte angenommen werden,10,6,1,0,0,0,0,0,5
+vote,de,dürfte abgelehnt werden,10,3,0,0,0,0,0,0,3
+vote,de,dürfte verworfen werden,5,2,0,0,0,0,0,0,2
+vote,de,wird durchfallen,10,0,0,0,0,0,0,0,0
+vote,de,wird wahrscheinlich angenommen,10,1,0,0,0,0,0,0,1
+vote,de,wird wahrscheinlich abgelehnt,10,1,0,0,0,0,0,0,1
+vote,de,wird klar angenommen,10,0,0,0,0,0,0,0,0
+vote,de,wird klar abgelehnt,10,0,0,0,0,0,0,0,0
+vote,de,hat keine Chance,10,0,0,0,0,0,0,0,0
+vote,de,wird das Volk annehmen,10,0,0,0,0,0,0,0,0
+vote,de,wird das Volk ablehnen,10,0,0,0,0,0,0,0,0
+vote,de,wird scheitern,10,0,0,0,0,0,0,0,0
+vote,de,wird deutlich abgelehnt,10,0,0,0,0,0,0,0,0
+vote,de,wird deutlich angenommen,10,0,0,0,0,0,0,0,0
+vote,en,will be carried,10,0,0,0,0,0,0,0,0
+vote,en,will be defeated,10,0,0,0,0,0,0,0,0
+vote,en,will be rejected,10,0,0,0,0,0,0,0,0
+vote,en,will be approved,10,0,0,0,0,0,0,0,0
+vote,en,will be adopted,10,0,0,0,0,0,0,0,0
+vote,en,is certain to pass,0,0,0,0,0,0,0,0,0
+vote,en,is likely to pass,1,0,0,0,0,0,0,0,0
+vote,en,is likely to be rejected,0,0,0,0,0,0,0,0,0
+vote,en,is likely to be defeated,0,0,0,0,0,0,0,0,0
+vote,en,the referendum will,10,0,0,0,0,0,0,0,0
+vote,en,will be voted down,3,0,0,0,0,0,0,0,0
+vote,en,will be overwhelmingly,2,0,0,0,0,0,0,0,0
+vote,en,is sure to be rejected,0,0,0,0,0,0,0,0,0
+vote,en,is sure to be carried,0,0,0,0,0,0,0,0,0
+vote,en,will be endorsed by the voters,0,0,0,0,0,0,0,0,0
+sport,fr,devrait l'emporter,10,10,8,1,0,0,0,0,1
+sport,fr,devrait remporter,10,10,9,0,0,0,1,0,0
+sport,fr,devrait gagner,10,10,7,0,0,0,0,0,3
+sport,fr,l'emportera,10,6,4,0,0,0,0,0,2
+sport,fr,s'imposera,10,3,1,0,0,0,0,0,2
+sport,fr,remportera,10,10,6,0,0,0,0,0,4
+sport,fr,gagnera le,10,4,4,0,0,0,0,0,0
+sport,fr,gagnera la,10,2,2,0,0,0,0,0,0
+sport,fr,gagnera facilement,10,10,7,0,1,0,0,0,2
+sport,fr,battra,10,10,3,0,0,0,0,0,7
+sport,fr,sera champion,10,0,0,0,0,0,0,0,0
+sport,fr,sera sacré,10,0,0,0,0,0,0,0,0
+sport,fr,sera sacrée,10,0,0,0,0,0,0,0,0
+sport,fr,terminera premier,10,10,3,0,2,0,0,0,5
+sport,fr,terminera en tête,10,10,8,0,0,0,0,0,2
+sport,fr,sera relégué,10,0,0,0,0,0,0,0,0
+sport,fr,sera promu,10,0,0,0,0,0,0,0,0
+sport,fr,sera promue,10,0,0,0,0,0,0,0,0
+sport,fr,les pronostics donnent,10,8,3,0,1,0,0,0,4
+sport,fr,a toutes les chances de gagner,10,10,6,0,1,0,0,0,3
+sport,fr,pronostic,10,10,6,2,0,0,0,0,2
+sport,de,dürfte gewinnen,10,5,2,0,0,0,0,0,3
+sport,de,wird gewinnen,10,0,0,0,0,0,0,0,0
+sport,de,wird siegen,10,0,0,0,0,0,0,0,0
+sport,de,dürfte siegen,10,0,0,0,0,0,0,0,0
+sport,de,dürfte Meister werden,10,0,0,0,0,0,0,0,0
+sport,de,wird Meister,10,0,0,0,0,0,0,0,0
+sport,de,wird Meister werden,10,0,0,0,0,0,0,0,0
+sport,de,wird absteigen,10,0,0,0,0,0,0,0,0
+sport,de,wird aufsteigen,10,0,0,0,0,0,0,0,0
+sport,de,dürfte absteigen,0,0,0,0,0,0,0,0,0
+sport,de,wird den Titel,10,0,0,0,0,0,0,0,0
+sport,de,wird sich durchsetzen,10,0,0,0,0,0,0,0,0
+sport,de,dürfte sich durchsetzen,3,2,0,0,0,0,0,0,2
+sport,de,ist der Sieg kaum zu nehmen,10,0,0,0,0,0,0,0,0
+sport,de,wird das Rennen machen,10,0,0,0,0,0,0,0,0
+sport,de,wird das Spiel gewinnen,10,0,0,0,0,0,0,0,0
+sport,en,is expected to win the,1,0,0,0,0,0,0,0,0
+sport,en,should win the,0,0,0,0,0,0,0,0,0
+sport,en,will win the,10,0,0,0,0,0,0,0,0
+sport,en,is tipped to win,0,0,0,0,0,0,0,0,0
+sport,en,will beat,10,0,0,0,0,0,0,0,0
+sport,en,should beat,0,0,0,0,0,0,0,0,0
+sport,en,should defeat,0,0,0,0,0,0,0,0,0
+sport,en,will defeat,10,0,0,0,0,0,0,0,0
+sport,en,will take the title,3,0,0,0,0,0,0,0,0
+sport,en,will win easily,0,0,0,0,0,0,0,0,0
+sport,en,will be champion,10,0,0,0,0,0,0,0,0
+sport,en,will be relegated,4,0,0,0,0,0,0,0,0
+sport,en,will be promoted,10,2,0,0,0,0,0,0,2
+sport,en,will finish first,0,0,0,0,0,0,0,0,0
+sport,en,is certain to win,0,0,0,0,0,0,0,0,0
+sport,en,is sure to win,0,0,0,0,0,0,0,0,0
+election,fr,sera élu,10,0,0,0,0,0,0,0,0
+election,fr,sera réélu,10,0,0,0,0,0,0,0,0
+election,fr,sera élue,10,0,0,0,0,0,0,0,0
+election,fr,sera réélue,10,0,0,0,0,0,0,0,0
+election,fr,devrait être élu,10,10,10,0,0,0,0,0,0
+election,fr,devrait être réélu,10,8,6,0,2,0,0,0,0
+election,fr,sera battu,10,0,0,0,0,0,0,0,0
+election,fr,sera plébiscité,10,0,0,0,0,0,0,0,0
+election,fr,sera confirmé,10,0,0,0,0,0,0,0,0
+election,fr,obtiendra la majorité,10,6,5,0,0,0,0,0,1
+election,fr,gagnera des sièges,10,3,3,0,0,0,0,0,0
+election,fr,perdra des sièges,10,2,2,0,0,0,0,0,0
+election,fr,remportera les élections,10,6,5,0,1,0,0,0,0
+election,fr,remportera l'élection,5,5,4,0,1,0,0,0,0
+election,fr,sera le prochain président,10,1,1,0,0,0,0,0,0
+election,fr,sera le prochain conseiller fédéral,10,1,1,0,0,0,0,0,0
+election,fr,sera la prochaine conseillère fédérale,1,0,0,0,0,0,0,0,0
+election,fr,ne sera pas réélu,10,0,0,0,0,0,0,0,0
+election,fr,ne sera pas élu,10,0,0,0,0,0,0,0,0
+election,de,wird gewählt werden,10,0,0,0,0,0,0,0,0
+election,de,dürfte gewählt werden,10,1,1,0,0,0,0,0,0
+election,de,wird wiedergewählt,10,0,0,0,0,0,0,0,0
+election,de,dürfte wiedergewählt werden,5,1,1,0,0,0,0,0,0
+election,de,wird Sitze gewinnen,10,0,0,0,0,0,0,0,0
+election,de,wird Sitze verlieren,10,0,0,0,0,0,0,0,0
+election,de,wird gewählt,10,4,1,1,0,0,0,0,2
+election,de,wird zum Bundesrat,10,0,0,0,0,0,0,0,0
+election,de,wird nicht gewählt,10,0,0,0,0,0,0,0,0
+election,de,wird nicht wiedergewählt,10,0,0,0,0,0,0,0,0
+election,de,wird die Wahl gewinnen,10,2,1,1,0,0,0,0,0
+election,de,wird die Wahlen gewinnen,10,0,0,0,0,0,0,0,0
+election,de,dürfte die Wahl gewinnen,0,0,0,0,0,0,0,0,0
+election,de,wird Sitze zulegen,10,0,0,0,0,0,0,0,0
+election,de,wird Sitze einbüssen,10,0,0,0,0,0,0,0,0
+election,en,will be elected,10,0,0,0,0,0,0,0,0
+election,en,will be re-elected,4,0,0,0,0,0,0,0,0
+election,en,will be returned,10,1,0,0,0,0,0,0,1
+election,en,is expected to win,1,0,0,0,0,0,0,0,0
+election,en,will carry the,10,0,0,0,0,0,0,0,0
+election,en,will win a majority,0,0,0,0,0,0,0,0,0
+election,en,will lose seats,0,0,0,0,0,0,0,0,0
+election,en,will gain seats,0,0,0,0,0,0,0,0,0
+election,en,is sure to be elected,0,0,0,0,0,0,0,0,0
+election,en,will win the election,0,0,0,0,0,0,0,0,0
+election,en,will win the presidency,0,0,0,0,0,0,0,0,0
+election,en,will be the next president,1,0,0,0,0,0,0,0,0
+election,en,will be the next prime minister,0,0,0,0,0,0,0,0,0
+election,en,will not be re-elected,4,0,0,0,0,0,0,0,0
+election,en,will be defeated at the polls,0,0,0,0,0,0,0,0,0
+election,en,will sweep,10,0,0,0,0,0,0,0,0
+project,fr,sera inauguré,10,1,1,0,0,0,0,0,0
+project,fr,sera inaugurée,10,0,0,0,0,0,0,0,0
+project,fr,sera mis en service,10,1,1,0,0,0,0,0,0
+project,fr,sera mise en service,10,0,0,0,0,0,0,0,0
+project,fr,sera ouvert au trafic,10,0,0,0,0,0,0,0,0
+project,fr,sera ouverte au trafic,10,0,0,0,0,0,0,0,0
+project,fr,sera terminé,10,1,1,0,0,0,0,0,0
+project,fr,sera terminée,10,0,0,0,0,0,0,0,0
+project,fr,sera achevé,10,1,1,0,0,0,0,0,0
+project,fr,sera achevée,10,0,0,0,0,0,0,0,0
+project,fr,sera livré,10,0,0,0,0,0,0,0,0
+project,fr,sera livrée,10,0,0,0,0,0,0,0,0
+project,fr,sera achevé en,10,0,0,0,0,0,0,0,0
+project,fr,les travaux seront terminés,10,4,4,0,0,0,0,0,0
+project,fr,les travaux seront achevés,10,2,2,0,0,0,0,0,0
+project,fr,l'ouverture est prévue,10,8,7,0,0,0,0,0,1
+project,fr,la mise en service est prévue,10,10,10,0,0,0,0,0,0
+project,fr,l'inauguration aura lieu,10,4,3,1,0,0,0,0,0
+project,fr,sera ouvert en,10,0,0,0,0,0,0,0,0
+project,fr,sera ouverte en,10,0,0,0,0,0,0,0,0
+project,de,wird eingeweiht,10,0,0,0,0,0,0,0,0
+project,de,wird eröffnet,10,0,0,0,0,0,0,0,0
+project,de,wird in Betrieb genommen,10,0,0,0,0,0,0,0,0
+project,de,wird fertiggestellt,10,0,0,0,0,0,0,0,0
+project,de,wird vollendet,10,0,0,0,0,0,0,0,0
+project,de,wird dem Verkehr übergeben,10,0,0,0,0,0,0,0,0
+project,de,dürfte fertiggestellt,2,1,1,0,0,0,0,0,0
+project,de,dürfte eröffnet,8,0,0,0,0,0,0,0,0
+project,de,wird abgeschlossen,10,0,0,0,0,0,0,0,0
+project,de,die Eröffnung ist vorgesehen,6,0,0,0,0,0,0,0,0
+project,de,die Inbetriebnahme ist vorgesehen,3,1,1,0,0,0,0,0,0
+project,de,die Einweihung findet,10,4,0,1,0,0,0,0,3
+project,de,wird im Jahr,10,0,0,0,0,0,0,0,0
+project,en,will be opened,10,1,1,0,0,0,0,0,0
+project,en,will be completed,10,0,0,0,0,0,0,0,0
+project,en,will be inaugurated,10,0,0,0,0,0,0,0,0
+project,en,will be finished,10,0,0,0,0,0,0,0,0
+project,en,will be ready,10,0,0,0,0,0,0,0,0
+project,en,will open in,10,0,0,0,0,0,0,0,0
+project,en,will be open to traffic,2,0,0,0,0,0,0,0,0
+project,en,is due to open,4,1,0,1,0,0,0,0,0
+project,en,is due to be completed,0,0,0,0,0,0,0,0,0
+project,en,is scheduled to open,1,1,1,0,0,0,0,0,0
+project,en,is scheduled for completion,0,0,0,0,0,0,0,0,0
+project,en,will be commissioned,10,1,1,0,0,0,0,0,0
+project,en,will be put into service,2,0,0,0,0,0,0,0,0
+project,en,construction will be completed,0,0,0,0,0,0,0,0,0
+justice,fr,sera condamné,10,0,0,0,0,0,0,0,0
+justice,fr,sera condamnée,10,0,0,0,0,0,0,0,0
+justice,fr,sera acquitté,10,0,0,0,0,0,0,0,0
+justice,fr,sera acquittée,10,0,0,0,0,0,0,0,0
+justice,fr,sera libéré,10,0,0,0,0,0,0,0,0
+justice,fr,sera libérée,10,0,0,0,0,0,0,0,0
+justice,fr,sera jugé,10,0,0,0,0,0,0,0,0
+justice,fr,sera jugée,10,0,0,0,0,0,0,0,0
+justice,fr,le verdict sera,10,0,0,0,0,0,0,0,0
+justice,fr,le jugement sera rendu,10,5,3,2,0,0,0,0,0
+justice,fr,le tribunal rendra,10,10,8,1,1,0,0,0,0
+justice,fr,sera extradé,10,0,0,0,0,0,0,0,0
+justice,fr,sera extradée,10,1,1,0,0,0,0,0,0
+justice,fr,sera exécuté,10,0,0,0,0,0,0,0,0
+justice,fr,écopera de,10,2,0,1,0,0,0,0,1
+justice,fr,sera relaxé,10,0,0,0,0,0,0,0,0
+justice,fr,sera relaxée,10,0,0,0,0,0,0,0,0
+justice,fr,sera probablement condamné,10,2,1,0,0,0,0,0,1
+justice,fr,sera sans doute acquitté,10,0,0,0,0,0,0,0,0
+justice,fr,sera vraisemblablement acquitté,10,4,2,0,0,0,0,0,2
+justice,fr,sera vraisemblablement condamné,10,1,0,0,0,0,0,0,1
+justice,de,wird verurteilt,10,0,0,0,0,0,0,0,0
+justice,de,wird freigesprochen,10,0,0,0,0,0,0,0,0
+justice,de,wird freigelassen,10,0,0,0,0,0,0,0,0
+justice,de,dürfte verurteilt,6,0,0,0,0,0,0,0,0
+justice,de,dürfte freigesprochen,0,0,0,0,0,0,0,0,0
+justice,de,wird das Urteil,10,0,0,0,0,0,0,0,0
+justice,de,das Urteil wird,10,1,0,1,0,0,0,0,0
+justice,de,das Urteil dürfte,10,2,2,0,0,0,0,0,0
+justice,de,wird ausgeliefert,10,0,0,0,0,0,0,0,0
+justice,de,wird hingerichtet,10,0,0,0,0,0,0,0,0
+justice,de,muss mit einer Verurteilung rechnen,10,0,0,0,0,0,0,0,0
+justice,de,muss mit einem Freispruch rechnen,3,0,0,0,0,0,0,0,0
+justice,en,will be convicted,6,0,0,0,0,0,0,0,0
+justice,en,will be acquitted,2,0,0,0,0,0,0,0,0
+justice,en,will be sentenced,8,0,0,0,0,0,0,0,0
+justice,en,will be released,10,1,0,0,0,0,0,0,1
+justice,en,will be hanged,4,0,0,0,0,0,0,0,0
+justice,en,will be executed,10,0,0,0,0,0,0,0,0
+justice,en,will be extradited,0,0,0,0,0,0,0,0,0
+justice,en,is likely to be convicted,0,0,0,0,0,0,0,0,0
+justice,en,is likely to be acquitted,0,0,0,0,0,0,0,0,0
+justice,en,the verdict will,10,1,1,0,0,0,0,0,0
+justice,en,the jury will,10,0,0,0,0,0,0,0,0
+justice,en,will be found guilty,2,0,0,0,0,0,0,0,0
+justice,en,will be found not guilty,0,0,0,0,0,0,0,0,0
+justice,en,will be tried,10,0,0,0,0,0,0,0,0

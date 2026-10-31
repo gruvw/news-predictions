@@ -31,8 +31,6 @@ vote,en,is likely to pass,1,0,0,0,0,0,0,0
 vote,en,is likely to be rejected,0,0,0,0,0,0,0,0
 vote,en,is likely to be defeated,0,0,0,0,0,0,0,0
 vote,en,the referendum will,10,0,0,0,0,0,0,0
-sport,fr,partira favori,10,10,9,1,0,0,0,0
-sport,fr,est le grand favori,10,8,4,1,0,0,0,3
 sport,fr,devrait l'emporter,10,10,3,1,0,0,0,6
 sport,fr,devrait remporter,10,10,7,0,0,0,0,3
 sport,fr,s'imposera,10,3,1,0,0,0,0,2
