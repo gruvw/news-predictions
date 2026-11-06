@@ -13,6 +13,7 @@
   
 
 ## 2. Define Impresso search parameters
+
 #### Cues / Search terms
 - Find the types of clues that lead to the highest density predictions in results 
 - Is it a statement about the futur? → Refine the search terms to match grammar/expressions about future

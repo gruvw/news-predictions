@@ -15,6 +15,13 @@ It could contain multiple atomic statements:
 
 We cannot determine disjunct categories for predictive statements. Therefore, we break each one down in it's atomic parts that can have a binary outcome.
 
+### The Definition of a Prediction
+
+- Theoretically, any statement can be a prediction -> show the Englang vs Spain example with atomic predictions highlighted in color
+- To remain limited in scope, we defined a prediction to be what we think the author of the prediction quote expects the context to be (what he expects to remain/be true).
+
+- The problem is not determining what a prediction  is, but figuring out which predictions we can feasibly confirm with appropriate sources.
+
 ### Confidence Expression   
  prediction like "Spain will win the world cup." carries a much higher confidence than "Spain has good chances to win this world cup."
 - This is valuable information that should be extracted and recorded in the database
