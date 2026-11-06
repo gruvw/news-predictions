@@ -1,0 +1,36 @@
+# Midterm pres
+
+- Thinking process
+- What is a prediction, what's a good prediction (high certainty/likelyhood)
+- Dataset approach
+    - Fact based
+    - Prediction based
+- Methods we tried for extraction
+    - Impresso search methods
+        - Topics cues compined with strong future cues  -> too little extractions, not even best quality
+        - Strong future cues -> too much noise
+        - Weak future cues -> too many extractions, not actual statements (what's an intersting prediction)
+        - Topics cues combined with weak future cues -> ok results, low ratio
+    - LLM based extraction
+        - Download braod articles (topic cues first, some weak future cues)
+        - Give full article to LLM, tailed system prompt, json output schema
+        - Free statement resulotion from context step (with Impresso method we had to go through this anyway at some point)
+            - translation
+            - relative names
+            - dates
+            - categories
+            - ...
+            - resolution date and confidence
+        - Tried different models (deepseek flash vs pro v4), with and without thinking
+        - Talk about rejections crietiera and system prompt
+- Show results -> number of articles 800, number of predictions 3400, good quality
+- Next steps
+    - Source of truth and statements outcome search
+    - Questions generation from resolved prediction statements
+- Cost and compute
+    - 1$ exploration 4$ extraction => quite good for extraction
+    - Costs for statement outcome search expected to be a little higher, reduced input domain, still need work
+- Cost mitgation
+    - Back select artciles (using cues) with high degree of outcome verifiability
+    - Try an impresso search for newspapers reporting back on events (after resolution date)
+    - Cost proportional (linear) to finala dataset quantity
