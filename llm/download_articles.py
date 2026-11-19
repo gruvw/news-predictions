@@ -48,6 +48,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from impresso_quota import UsageCounter
+
 import impresso.util.retry as impresso_retry
 from impresso import OR, DateRange, connect
 from impresso.util.error import ImpressoError
@@ -287,6 +290,7 @@ class AdaptiveRateLimiter:
 class Downloader:
     def __init__(self) -> None:
         self.client = connect()
+        self.usage = UsageCounter()
         self.lock = threading.Lock()   # guards seen_ids, counters and the manifest
         self.seen_ids: set[str] = set()
         self.api_calls = 0
@@ -361,7 +365,10 @@ class Downloader:
         )
         if LANGUAGES:
             kwargs["language"] = OR(LANGUAGES)
-        return self._call(self.client.search.find, **kwargs)
+        result = self._call(self.client.search.find, **kwargs)
+        if result is not None:
+            self.usage.record("search_results", len(result.raw.get("data", [])))
+        return result
 
     # -- hit iteration -----------------------------------------------------
 
@@ -448,6 +455,7 @@ class Downloader:
             item = self._call(self.client.content_items.get, cid)
             if item is None:
                 return False
+            self.usage.record("item_fetches", 1)
             raw = item.raw
             text = (raw.get("text") or {}).get("content")
             meta = {**meta, **(raw.get("meta") or {})}
@@ -527,6 +535,7 @@ def main() -> None:
     grid = {(c.topic, c.year): c for c in order}
 
     dl = Downloader()
+    log.info(dl.usage.summary())
     already = load_manifest(grid, dl)
     dl.downloaded = already
     log.info("Target: %d articles over %d years x %d topics (%d cells); %d already on disk.",
@@ -568,6 +577,7 @@ def main() -> None:
 
     total = sum(c.have for c in order)
     log.info("Finished: %d articles in %s (%d API calls).", total, ARTICLES_DIR, dl.api_calls)
+    log.info(dl.usage.summary())
     if total < TOTAL_ARTICLES:
         log.warning("Only %d/%d articles available with the current filters.",
                     total, TOTAL_ARTICLES)
