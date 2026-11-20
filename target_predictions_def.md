@@ -1,0 +1,3 @@
+# Target predictions
+
+A target prediction is a claim that a specific real-world event will or will not occur, or that a particular future state will or will not obtain, with enough detail to assess its accuracy later against observable evidence. At publication, a different outcome must be a credible possibility, regardless of how confidently the claim is worded. Routine schedules and announcements qualify only if they also forecast a genuinely uncertain outcome. Predictions about developments with broad societal or global significance are preferred, though narrower outcomes such as sports results also qualify.
