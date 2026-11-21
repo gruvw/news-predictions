@@ -220,4 +220,4 @@ __marimo__/
 .streamlit/secrets.toml
 
 llm/articles/**
-outcome-oriented/articles/**
+outcome-oriented/prediction_sample/articles/**

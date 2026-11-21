@@ -9,6 +9,7 @@ multiple downloader processes concurrently against the same counter file.
 import datetime as dt
 import json
 import threading
+import time
 from pathlib import Path
 
 
@@ -31,7 +32,16 @@ class UsageCounter:
             totals[kind] += amount
             temp = COUNTER.with_suffix(".tmp")
             temp.write_text(json.dumps(self.data, indent=2) + "\n", encoding="utf-8")
-            temp.replace(COUNTER)
+            # Windows may briefly block replacement while another program reads
+            # the file (for example, an editor or antivirus scanner).
+            for attempt in range(5):
+                try:
+                    temp.replace(COUNTER)
+                    break
+                except PermissionError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.2 * (attempt + 1))
 
     def summary(self):
         with self.lock:
