@@ -1,5 +1,10 @@
 # Step 3: prediction extraction pilot
 
+For the bounded baseline → calibration → one query revision → fresh comparison
+workflow, use [the experiment orchestrator](./experiment_README.md). It reuses
+extraction v2, processes all eligible baseline IDs, independently reviews results,
+and provides one preview command and one run/resume command with a common budget.
+
 This script uses `gpt-6-luna` through the OpenAI Responses API. Install its only
 dependency with `pip install python-dotenv`. Put `OPENAI_API_KEY=your-key` in the
 repository root's `.env` file (already excluded from Git). This file loads

@@ -117,7 +117,8 @@ def iter_queries(language):
     """Yield (family, search.find kwargs) for one language."""
     term_groups = {
         "forecast_frame": OR(*FORECAST_FRAMES[language]),
-        "likelihood": OR(*LIKELIHOOD[language]),
+        "likelihood_and_future": (OR(*LIKELIHOOD[language]) &
+            OR(*MODALS_OR_FUTURE_FORMS[language])),
         "long_horizon": OR(*LONG_HORIZONS[language]),
         "modal_or_future_form_and_calendar": (
             OR(*MODALS_OR_FUTURE_FORMS[language]) & OR(*CALENDAR_CUES[language])

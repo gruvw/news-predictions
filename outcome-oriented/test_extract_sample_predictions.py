@@ -165,6 +165,43 @@ class ExtractionTests(unittest.TestCase):
         rows = {row["article_id"]: row for row in self.read_csv("articles.csv")}
         self.assertEqual(json.loads(rows["a"]["query_ids"]), ["en.new_frame"])
 
+    def test_checkpoint_retries_transient_windows_replace_lock(self):
+        path = self.root / "checkpoint.json"
+        original = Path.replace
+        attempts = []
+        def locked_replace(source, destination):
+            attempts.append(source)
+            if len(attempts) < 3:
+                raise PermissionError("Windows sharing lock")
+            return original(source, destination)
+        with patch.object(Path, "replace", locked_replace), patch.object(extract.time, "sleep") as pause:
+            extract.checkpoint(path, {"saved": True})
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual(pause.call_count, 2)
+        self.assertEqual(json.loads(path.read_text()), {"saved": True})
+        self.assertFalse(path.with_suffix(".tmp").exists())
+
+    def test_checkpoint_persistent_lock_is_bounded_and_preserves_both_snapshots(self):
+        path = self.root / "checkpoint.json"
+        extract.checkpoint(path, {"version": "old"})
+        with patch.object(Path, "replace", side_effect=PermissionError("still locked")) as replace, \
+                patch.object(extract.time, "sleep") as pause:
+            with self.assertRaisesRegex(PermissionError, "8 local attempts"):
+                extract.checkpoint(path, {"version": "new"})
+        self.assertEqual(replace.call_count, 8)
+        self.assertEqual(pause.call_count, 7)
+        self.assertEqual(json.loads(path.read_text()), {"version": "old"})
+        self.assertEqual(json.loads(path.with_suffix(".tmp").read_text()), {"version": "new"})
+
+    def test_local_retry_does_not_retry_other_errors(self):
+        from unittest.mock import Mock
+        operation = Mock(side_effect=OSError("disk full"))
+        with patch.object(extract.time, "sleep") as pause:
+            with self.assertRaisesRegex(OSError, "disk full"):
+                extract.retry_file_operation(operation)
+        operation.assert_called_once()
+        pause.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

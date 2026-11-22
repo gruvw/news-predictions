@@ -1,0 +1,20 @@
+{
+  "seed": 44,
+  "per_query": 2,
+  "min_chars": 200,
+  "page_size": 20,
+  "result_window": 5000,
+  "max_pages_per_query": 5,
+  "search_limit": 1500,
+  "fetch_limit": 300,
+  "max_articles": 100,
+  "comparison_articles": 24,
+  "languages": [
+    "fr",
+    "de",
+    "en"
+  ],
+  "query_version": "20631a31c16c947e40fcb9bf9bc11a09ffec381eba6f5c1743967bc875cb505c",
+  "years": "all",
+  "order_by": "id"
+}

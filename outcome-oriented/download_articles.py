@@ -94,7 +94,7 @@ def save_article(client, usage, hit, articles, min_chars=MIN_ARTICLE_CHARS):
     if info.get("itemType") not in ("ar", "article") or not info.get("content"):
         return None
     transcript = info["content"].strip()
-    if len(transcript) < min_chars or transcript == "[REDACTED]":
+    if len(transcript) < min_chars or "[REDACTED]" in transcript:
         return "too_short_or_redacted"
     if cached:
         return "reused"

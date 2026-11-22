@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import random
 import sys
+import time
 import urllib.request
 
 from dotenv import load_dotenv
@@ -236,10 +237,25 @@ def validate(response, text):
     return result
 
 
+def retry_file_operation(operation):
+    """Bounded retries for local Windows sharing locks, never network requests."""
+    for attempt in range(8):
+        try:
+            return operation()
+        except PermissionError as error:
+            if attempt == 7:
+                raise PermissionError(
+                    "Checkpoint file remained locked after 8 local attempts. Close programs holding "
+                    "the checkpoint open, then resume. Keep both the JSON and temporary files; "
+                    "do not delete saved work. " + str(error)) from error
+            time.sleep(min(0.1 * 2 ** attempt, 1.0))
+
+
 def checkpoint(path, state):
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    serialized = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
+    retry_file_operation(lambda: temporary.write_text(serialized, encoding="utf-8"))
+    retry_file_operation(lambda: temporary.replace(path))
 
 
 def write_csv(path, rows, fields, key):
