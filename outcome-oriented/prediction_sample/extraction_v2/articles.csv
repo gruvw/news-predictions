@@ -1,0 +1,13 @@
+﻿article_id,date,language,query_ids,status,prediction_count,no_prediction_reason,error,input_tokens,output_tokens,charged_or_reserved_usd,review_decision,review_notes
+BNN-1889-03-08-a-i0012,1889-03-08,de,"[""de.forecast_frame""]",completed,2,,,2583,689,0.0006027999999999999,,
+BNN-1888-07-31-a-i0001,1888-07-31,de,"[""de.likelihood""]",completed,3,,,1730,1198,0.000772,,
+BNN-1887-07-16-a-i0017,1887-07-16,de,"[""de.long_horizon""]",completed,0,"The article is mainly retrospective narrative and routine notices. Its future-oriented remarks are wishes or routine announcements, not qualifying forecasts of uncertain outcomes.",,3232,193,0.00041970000000000006,,
+BNN-1887-03-26-a-i0016,1887-03-26,de,"[""de.modal_or_future_form_and_calendar""]",completed,4,,,4362,973,0.0009227,,
+AGMO-1820-07-30-a-i0017,1820-07-30,en,"[""en.forecast_frame""]",completed,2,,,2304,716,0.0005884,,
+ALST-1831-06-06-a-i0013,1831-06-06,en,"[""en.likelihood""]",completed,7,,,7568,1543,0.0015283000000000002,,
+AGE52-1852-11-20-a-i0048,1852-11-20,en,"[""en.long_horizon""]",completed,1,,,5623,506,0.0008153,,
+AGMO-1824-06-13-a-i0001,1824-06-13,en,"[""en.modal_or_future_form_and_calendar""]",completed,0,"The article’s demographic and social outcomes are presented within a hypothetical land-division scenario, not as forecasts about a future state expected to occur. Other future-oriented passages are arguments, wishes, or too vague to check.",,3824,267,0.0005159000000000001,,
+DLE-1912-06-15-a-i0037,1912-06-15,fr,"[""fr.likelihood""]",completed,1,,,2246,753,0.0006011,,
+CDV-1855-03-08-a-i0004,1855-03-08,fr,"[""fr.long_horizon""]",completed,0,"The only explicit forecast is quoted as having been made about 250 years earlier, so its future timing is not established relative to the article's publication. The remaining future-looking language is rhetorical or too vague to assess.",,1586,374,0.0003456,,
+EDA-1844-01-22-a-i0008,1844-01-22,fr,"[""fr.modal_or_future_form_and_calendar""]",completed,2,,,2072,741,0.0005777,,
+BNN-1888-07-03-a-i0025,1888-07-03,de,"[""de.likelihood""]",completed,2,,,2947,713,0.0006512,,

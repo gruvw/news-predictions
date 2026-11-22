@@ -15,7 +15,10 @@ reuses article files already downloaded.
 Sampling: randomly ordered pages within the first 5,000 results sorted by ID,
 then shuffled hits within each page. This is a cheap, approximate sample, NOT
 a uniform sample of the full archive. At most five pages are tried per query;
-queries with few accessible articles may fall short. No topic/quality filters.
+queries with few accessible articles may fall short. Transcripts must contain at
+least 200 characters after trimming whitespace; [REDACTED] is always excluded.
+This uses available transcript text, not the source article's reported length.
+Use --min-chars to change the minimum and --seed to draw a different sample.
 
 UsageCounter persists successful search-result and article-fetch counts in the
 repository's impresso_usage.json, including discarded/repeated results. These
@@ -23,6 +26,7 @@ are approximate local usage counts, not the account's remaining quota. Do not
 run this alongside another downloader using the same counter file.
 """
 
+import argparse
 import csv
 import datetime as dt
 import json
@@ -45,6 +49,7 @@ PAGE_SIZE = 20
 RESULT_WINDOW = 5_000
 MAX_PAGES_PER_QUERY = 5
 RANDOM_SEED = 42  # Change to draw another sample; unchanged settings repeat it.
+MIN_ARTICLE_CHARS = 200
 OUTPUT = Path(__file__).resolve().parent / "prediction_sample"
 
 
@@ -71,15 +76,16 @@ def sample_query(client, usage, kwargs, rng, label):
         yield from hits
 
 
-def save_article(client, usage, hit, articles):
-    """Reuse an existing article; otherwise fetch its full text only if needed."""
+def save_article(client, usage, hit, articles, min_chars=MIN_ARTICLE_CHARS):
+    """Validate cached AND new transcripts before counting an article in a round."""
     path = articles / f"{hit['id']}.json"
-    if path.exists():
-        return "reused"
+    cached = path.exists()
+    if cached:
+        hit = json.loads(path.read_text(encoding="utf-8"))
     info = hit.get("text") or {}
     if info.get("itemType") and info["itemType"] not in ("ar", "article"):
         return None
-    if not info.get("content") or not info.get("itemType"):
+    if not cached and (not info.get("content") or not info.get("itemType")):
         print(f"    Fetching article {hit['id']}...", flush=True)
         item = client.content_items.get(hit["id"])
         usage.record("item_fetches", 1)
@@ -87,11 +93,22 @@ def save_article(client, usage, hit, articles):
         info = hit.get("text") or {}
     if info.get("itemType") not in ("ar", "article") or not info.get("content"):
         return None
+    transcript = info["content"].strip()
+    if len(transcript) < min_chars or transcript == "[REDACTED]":
+        return "too_short_or_redacted"
+    if cached:
+        return "reused"
     path.write_text(json.dumps(hit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return "saved"
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--min-chars", type=int, default=MIN_ARTICLE_CHARS)
+    parser.add_argument("--seed", type=int, default=RANDOM_SEED)
+    args = parser.parse_args()
+    if args.min_chars < 1:
+        parser.error("min-chars must be positive")
     client = connect(public_api_url="https://dev.impresso-project.ch/public-api/v1")
     usage = UsageCounter()
     print(usage.summary(), flush=True)
@@ -105,7 +122,8 @@ def main():
                     round_dir / "seed_queries.py")
     settings = dict(languages=LANGUAGES, articles_per_query=ARTICLES_PER_QUERY,
                     page_size=PAGE_SIZE, result_window=RESULT_WINDOW,
-                    max_pages_per_query=MAX_PAGES_PER_QUERY, random_seed=RANDOM_SEED,
+                    max_pages_per_query=MAX_PAGES_PER_QUERY, random_seed=args.seed,
+                    min_article_chars=args.min_chars,
                     years="all", order_by="id")
     (round_dir / "settings.json").write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     queries = [(language, family, kwargs)
@@ -115,19 +133,29 @@ def main():
     print(f"Round {round_id}: {len(queries)} queries, up to "
           f"{len(queries) * ARTICLES_PER_QUERY} articles.\nOutput: {round_dir}", flush=True)
     try:
-        with (round_dir / "references.csv").open("w", newline="", encoding="utf-8") as file:
+        with (round_dir / "references.csv").open("w", newline="", encoding="utf-8") as file, \
+                (round_dir / "skipped.csv").open("w", newline="", encoding="utf-8") as skip_file:
             writer = csv.writer(file)
             writer.writerow(["round", "query_id", "language", "family", "article_id"])
+            skip_writer = csv.writer(skip_file)
+            skip_writer.writerow(["round", "query_id", "article_id", "reason"])
             for index, (language, family, kwargs) in enumerate(queries, 1):
                 query_id = f"{language}.{family}"
-                rng = random.Random(f"{RANDOM_SEED}:{query_id}")
+                rng = random.Random(f"{args.seed}:{query_id}")
                 selected = set()
+                seen = set()
                 label = f"[{index}/{len(queries)}] {query_id}"
                 for hit in sample_query(client, usage, kwargs, rng, label):
                     cid = hit["id"]
-                    if cid in selected:
+                    if cid in seen:
                         continue
-                    status = save_article(client, usage, hit, articles)
+                    seen.add(cid)
+                    status = save_article(client, usage, hit, articles, args.min_chars)
+                    if status == "too_short_or_redacted":
+                        skip_writer.writerow([round_id, query_id, cid, status])
+                        skip_file.flush()
+                        print(f"  Skipping {cid}: short/redacted transcript", flush=True)
+                        continue
                     if status is None:
                         continue
                     writer.writerow([round_id, query_id, language, family, cid])

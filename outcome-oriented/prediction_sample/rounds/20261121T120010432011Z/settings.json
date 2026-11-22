@@ -1,0 +1,15 @@
+{
+  "languages": [
+    "fr",
+    "de",
+    "en"
+  ],
+  "articles_per_query": 20,
+  "page_size": 20,
+  "result_window": 5000,
+  "max_pages_per_query": 5,
+  "random_seed": 43,
+  "min_article_chars": 200,
+  "years": "all",
+  "order_by": "id"
+}

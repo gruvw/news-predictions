@@ -221,3 +221,5 @@ __marimo__/
 
 llm/articles/**
 outcome-oriented/prediction_sample/articles/**
+outcome-oriented/prediction_sample/extraction*/checkpoint.json
+outcome-oriented/prediction_sample/extraction*/checkpoint.tmp
