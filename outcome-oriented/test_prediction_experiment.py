@@ -460,14 +460,14 @@ def iter_queries(language):
         for cid in ("a", "p000", "p119"):
             self.saved_extraction(state, cid)
         costs = exp.costs(state)
-        exp.apply_scope(state)
+        exp.extend_comparison(state, 76, 24)
         self.assertEqual(len(state["baseline"]), 76)
         self.assertEqual(len(exp.library_ids(state)), 121)
         self.assertTrue({"a", "p000", "p119"} <= set(state["baseline"]))
         self.assertEqual(state["settings"]["comparison_articles"], 24)
         self.assertEqual(costs, exp.costs(state))
         ids = list(state["baseline"])
-        exp.apply_scope(state)
+        exp.extend_comparison(state, 76, 24)
         self.assertEqual(ids, list(state["baseline"]))
         self.assertEqual(len(state["scope_changes"]), 1)
 
@@ -580,7 +580,7 @@ def iter_queries(language):
     def test_prepare_generates_pending_fallback_without_applying_or_paying(self):
         state = self.likelihood_state()
         state["human_snapshot"] = {}
-        exp.apply_scope(state)
+        exp.extend_comparison(state, 76, 24)
         state["stage"] = "query_approval"
         exp.save(self.path, state)
         seeds_before = exp.SEEDS.read_text(encoding="utf-8")
@@ -634,6 +634,209 @@ def iter_queries(language):
                 exp.process(state, self.path, articles, 1)
         api.assert_not_called()
 
+    def test_extension_migration_retains_history_approvals_and_extra_work(self):
+        for i in range(110):
+            self.article(f"x{i:03}", language=("fr", "de", "en")[i % 3])
+        state = self.state()
+        state["library_baseline"] = copy.deepcopy(state["baseline"])
+        state["baseline"] = {c: state["baseline"][c] for c in sorted(state["baseline"])[:76]}
+        state["settings"].update(max_articles=100, comparison_articles=24)
+        self.saved_extraction(state)
+        state.update(stage="complete", method_fingerprint="frozen", query_version="approved", human_snapshot={"a:p1": "accept"})
+        state["llm"]["uncertain"] = dict(status="pending", cost_usd=.1)
+        old = copy.deepcopy(state)
+        exp.extend_comparison(state, 100, 100)
+        self.assertEqual(len(state["baseline"]), 100)
+        self.assertEqual(state["stage"], "extension")
+        self.assertEqual(state["llm"], old["llm"])
+        self.assertEqual(state["human_snapshot"], old["human_snapshot"])
+        self.assertEqual(state["settings"]["fetch_limit"], old["settings"]["fetch_limit"])
+        self.assertEqual(state["settings"]["per_query"], 9)
+        self.assertTrue(set(old["baseline"]) <= set(state["baseline"]))
+        once = copy.deepcopy(state)
+        exp.extend_comparison(state, 100, 100)
+        self.assertEqual(state, once)
+        exp.extend_comparison(state, 90, 90)
+        self.assertEqual(len(state["baseline"]), 100)  # never discard compatible work
+
+    def test_excluded_original_ids_remain_already_seen(self):
+        state = self.state()
+        state["excluded"] = [dict(article_id="redacted", reason="unavailable")]
+        self.assertEqual(exp.already_seen_ids(state), {"a", "redacted"})
+
+    def test_saved_detached_extraction_recovered_offline(self):
+        state = self.state()
+        key = exp.ex.digest(exp.request_for(state["baseline"]["a"], state["config"]))
+        state["llm"][key] = dict(status="pending", response=response(self.negative), cost_usd=.01)
+        before = copy.deepcopy(state["llm"])
+        with patch("urllib.request.urlopen") as api:
+            exp.recover_saved_extractions(state)
+        api.assert_not_called()
+        self.assertEqual(state["extractions"]["a"]["status"], "completed")
+        self.assertEqual(state["llm"], before)
+
+    def test_tables_match_denominators_and_keep_unresolved_separate(self):
+        self.article("b")
+        state = self.state()
+        for cid in ("a", "b"):
+            self.saved_extraction(state, cid, result=dict(predictions=[self.prediction()], no_prediction_reason=""))
+            self.saved_review(state, cid, result=dict(self.review, judgments=[self.judgment()]))
+        humans = {"b:p1": "flag"}
+        self.output.mkdir()
+        exp.export_tables(state, self.output, humans, state["baseline"])
+        def rows(name):
+            with (self.output / name).open(encoding="utf-8", newline="") as f:
+                return list(csv.DictReader(f))
+        self.assertEqual(len(rows("initial_predictions.csv")), exp.metrics(state, state["baseline"], humans)["P"])
+        cases = rows("initial_review_cases.csv")
+        self.assertEqual(len(cases), 2)
+        flagged = next(r for r in cases if r["article_id"] == "b")
+        self.assertEqual(flagged["human_override"], "flag")
+        self.assertEqual(flagged["included_in_totals"], "False")
+        self.assertFalse(any("path" in key or "context" in key for key in flagged))
+        self.assertTrue(all(len(r["quote"]) <= 600 for r in cases))
+        self.assertEqual(rows("initial_articles.csv")[1]["accepted_distinct_predictions"], "")
+
+    def test_private_hits_skip_fetch_and_streams_alternate(self):
+        import download_articles as dl
+        state = self.state()
+        state["settings"].update(comparison_articles=10, per_query=2)
+        state["query_version"] = exp.ex.digest(exp.SEEDS.read_text(encoding="utf-8"))
+        order = []
+        def stream(client, usage, kwargs, rng, label):
+            for n in range(2):
+                order.append(label)
+                yield dict(id=f"{label}{n}", access=dict(dataDomain="prt"))
+        with patch("impresso.client.ImpressoClient"), patch.object(dl, "LANGUAGES", ("fr", "de", "en")), \
+                patch("impresso_prediction_seed_queries.iter_queries", return_value=[("frame", {})]), \
+                patch.object(dl, "sample_query", side_effect=stream), patch.object(dl, "save_article") as fetch, \
+                patch.object(dl, "UsageCounter"):
+            exp.retrieve(state, self.path, self.sample, self.output)
+        fetch.assert_not_called()
+        self.assertEqual(order, ["fr.frame", "de.frame", "en.frame"] * 2)
+        self.assertEqual(len(state["retrieval_excluded"]), 6)
+
+    def test_relocated_prepare_preserves_reservations_and_raw_evidence(self):
+        state = self.state()
+        state["paths"] = dict(sample="/old/computer/sample", existing="/old/computer/existing")
+        state["retrieval"]["uncertain"] = dict(kind="item_fetches", params="lost", status="pending", reserved=1)
+        exp.save(self.path, state)
+        with patch("urllib.request.urlopen") as api, redirect_stdout(io.StringIO()):
+            exp.main(self.flags + ["--prepare"])
+        api.assert_not_called()
+        saved = exp.read(self.path)
+        self.assertEqual(saved["paths"]["sample"], str(self.sample.resolve()))
+        self.assertEqual(saved["retrieval"], state["retrieval"])
+
+    def test_explicit_fetch_limit_change_is_cumulative_and_persists(self):
+        state = self.state()
+        state["retrieval"]["spent"] = dict(kind="item_fetches", params="prior", status="completed", reserved=1, raw={}, total=None)
+        exp.save(self.path, state)
+        with patch("urllib.request.urlopen") as api, redirect_stdout(io.StringIO()):
+            exp.main(self.flags + ["--prepare", "--fetch-limit", "15"])
+            exp.main(self.flags + ["--prepare"])
+        api.assert_not_called()
+        saved = exp.read(self.path)
+        self.assertEqual(saved["settings"]["fetch_limit"], 15)
+        self.assertEqual(saved["retrieval"], state["retrieval"])
+        self.assertEqual(len(saved["limit_changes"]), 1)
+
+    def test_original_overlap_never_fetches_again_even_without_local_file(self):
+        import download_articles as dl
+        state = self.state()
+        state["query_version"] = exp.ex.digest(exp.SEEDS.read_text(encoding="utf-8"))
+        (self.sample / "articles/a.json").unlink()
+        with patch("impresso.client.ImpressoClient"), patch.object(dl, "LANGUAGES", ("en",)), \
+                patch("impresso_prediction_seed_queries.iter_queries", return_value=[("frame", {})]), \
+                patch.object(dl, "sample_query", return_value=iter([dict(id="a")])), \
+                patch.object(dl, "save_article") as fetch, patch.object(dl, "UsageCounter"):
+            exp.retrieve(state, self.path, self.sample, self.output)
+        fetch.assert_not_called()
+        self.assertEqual(state["refined"], [])
+        self.assertEqual(state["refined_all"], ["a"])
+
+    def test_sparse_cells_redistribute_quota_without_new_query_or_pages(self):
+        import download_articles as dl
+        state = self.state()
+        state["settings"].update(comparison_articles=4, per_query=1)
+        state["query_version"] = exp.ex.digest(exp.SEEDS.read_text(encoding="utf-8"))
+        hits = [self.article(f"fresh{i}") for i in range(4)]
+        def stream(client, usage, kwargs, rng, label):
+            return iter([] if label.startswith("fr.") else hits)
+        with patch("impresso.client.ImpressoClient"), patch.object(dl, "LANGUAGES", ("fr", "en")), \
+                patch("impresso_prediction_seed_queries.iter_queries", return_value=[("frame", {})]), \
+                patch.object(dl, "sample_query", side_effect=stream) as samples, patch.object(dl, "UsageCounter"):
+            exp.retrieve(state, self.path, self.sample, self.output)
+        self.assertEqual(len(state["refined"]), 4)
+        self.assertEqual(samples.call_count, 2)
+
+    def test_sdk_internal_read_error_and_server_error_never_retry(self):
+        import httpx
+        from impresso.util import retry
+        with patch.object(retry, "MAX_ATTEMPTS", retry.MAX_ATTEMPTS):
+            exp.impresso_client("offline-test")
+            for failure in (httpx.ReadError("lost response"), None):
+                attempts = []
+                def handler(request):
+                    attempts.append(request)
+                    if failure:
+                        raise failure
+                    return httpx.Response(503, request=request)
+                with retry.RetryingClient(transport=httpx.MockTransport(handler)) as client:
+                    with redirect_stdout(io.StringIO()):
+                        if failure:
+                            with self.assertRaises(httpx.ReadError):
+                                client.get("https://offline.test/")
+                        else:
+                            self.assertEqual(client.get("https://offline.test/").status_code, 503)
+                self.assertEqual(len(attempts), 1)
+
+    def test_uncertain_query_is_skipped_without_replaying_or_blocking_other_cells(self):
+        import download_articles as dl
+        state = self.state()
+        state["query_version"] = exp.ex.digest(exp.SEEDS.read_text(encoding="utf-8"))
+        def stream(client, usage, kwargs, rng, label):
+            if label == "en.frame":
+                raise exp.UncertainRetrieval("Uncertain saved request")
+            yield self.article("new")
+        with patch("impresso.client.ImpressoClient"), patch.object(dl, "LANGUAGES", ("en", "fr")), \
+                patch("impresso_prediction_seed_queries.iter_queries", return_value=[("frame", {})]), \
+                patch.object(dl, "sample_query", side_effect=stream), patch.object(dl, "UsageCounter"):
+            exp.retrieve(state, self.path, self.sample, self.output)
+        self.assertIn("en.frame", state["unresolved_queries"])
+        self.assertEqual(state["refined"], ["new"])
+
+    def test_interrupted_retrieval_reports_saved_new_articles_without_downloading(self):
+        state = self.state()
+        self.article("new")
+        state.update(refined=["new"], refined_all=["new"], stage="retrieval")
+        self.output.mkdir()
+        with patch("urllib.request.urlopen") as api:
+            exp.report(state, self.output)
+        api.assert_not_called()
+        with (self.output / "refined_articles.csv").open(encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual(rows[0]["extraction_status"], "unattempted")
+        self.assertEqual(rows[0]["accepted_distinct_predictions"], "")
+
+    def test_pending_review_survives_handoff_without_replay_and_other_work_continues(self):
+        self.article("b")
+        state = self.state()
+        self.saved_extraction(state)
+        self.saved_extraction(state, "b")
+        self.saved_review(state, "b")
+        key = exp.ex.digest(exp.request_for(state["baseline"]["a"], state["review_config"], self.negative))
+        state["llm"][key] = dict(status="pending", cost_usd=.01)
+        exp.recover_saved_extractions(state)
+        before = copy.deepcopy(state["llm"])
+        with patch("urllib.request.urlopen") as api, redirect_stdout(io.StringIO()):
+            exp.process(state, self.path, state["baseline"], 1)
+        api.assert_not_called()
+        self.assertEqual(state["llm"], before)
+        self.assertIn("a", state["unresolved_articles"])
+        self.assertEqual(exp.metrics(state, state["baseline"], {})["N"], 1)
+        self.assertEqual(exp.metrics(state, state["baseline"], {})["failed"], 1)
+
     def test_mocked_bounded_full_workflow_stops(self):
         # Exercise stage transitions and repeated --run after completion; use a
         # local seed file so this test cannot change the repository's active queries.
@@ -663,7 +866,7 @@ def iter_queries(language):
             self.assertEqual(retrieval.call_count, 1)
         api.assert_not_called()
         report = exp.read(self.output / "report.json")
-        self.assertEqual(report["stage"], "complete")
+        self.assertEqual(report["stage"], "shortfall")
         self.assertEqual(report["statistics"]["refined_unseen"]["N"], 0)
         self.assertEqual(report["overlap"], 1)
         self.assertIsNone(report["positive_article_rate_difference_pp"])

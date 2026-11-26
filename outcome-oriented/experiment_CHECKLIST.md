@@ -1,32 +1,25 @@
-# Short experiment checklist
+# Comparison checklist
 
-The experiment now covers **at most 100 articles total: 76 baseline + 24 fresh**.
-Existing paid work is reused. Unsupported quotations stay unresolved; no paid retry.
+- [x] Inspect and reuse the previous bounded attempt; retain human approvals.
+- [x] Offline tests and [free preview/preparation](./experiment_README.md).
+- [x] Extend initial selection to 100; preserve all frozen IDs as already seen.
+- [ ] Approve any increased cumulative API limits before further retrieval.
+- [ ] Finish extraction/review with the frozen method; reach 100 eligible fresh articles.
+- [ ] Read the two accepted tables: [initial](./prediction_sample/experiment/initial_predictions.csv)
+  and [refined](./prediction_sample/experiment/refined_predictions.csv).
+- [ ] Inspect [initial coverage](./prediction_sample/experiment/initial_articles.csv),
+  [refined coverage](./prediction_sample/experiment/refined_articles.csv), and the
+  separate [initial](./prediction_sample/experiment/initial_review_cases.csv) /
+  [refined](./prediction_sample/experiment/refined_review_cases.csv) candidate tables.
+- [x] Preserve [calibration](./prediction_sample/experiment/calibration.json) and
+  [query approval](./prediction_sample/experiment/query-change.json).
+- [x] Export [original seeds](./prediction_sample/experiment/seed_queries_original.py),
+  [revised seeds](./prediction_sample/experiment/seed_queries_revised.py) and
+  [diff](./prediction_sample/experiment/query-comparison.diff).
+- [ ] Read the [comparison report](./prediction_sample/experiment/report.md) and
+  [machine statistics](./prediction_sample/experiment/report.json). Confirm cohort
+  sizes, N/A/P, coverage shortfalls, composition differences and descriptive limits.
 
-- [x] From the repository root, preview the remaining work for free:
-  `python outcome-oriented/prediction_experiment.py`
-- [x] Run/resume with a cumulative $2 LLM cap:
-  `python outcome-oriented/prediction_experiment.py --run --budget-usd 2`
-- [x] When it pauses, open [calibration.json](./prediction_sample/experiment/calibration.json).
-  Rate the six to eight cases in `human_decision` (`accept` / `reject` / `flag`;
-  negative articles: `checked_negative` / `missed_prediction` / `flag`).
-  Set `approve_method` to `true`. Repeat the same run command.
-- [x] At the next pause, open [query-approval.json](./prediction_sample/experiment/query-approval.json).
-  Read the single bundle and reasons. Set `approve` to `true` if agreed.
-  Repeat the same run command; it retrieves the fresh sample and stops after comparison.
-- [ ] Read [report.md](./prediction_sample/experiment/report.md).
-  Check usable review counts, unresolved cases, fresh-sample shortfalls and the recommendation.
-
-The approval files appear when their evidence is ready. For general corrections,
-leave approval false and use `general_directions`; see the
-[detailed instructions](./experiment_README.md). Budget stops retain all work;
-increase the explicit cap only if you want to spend more. Do not delete state or
-start another experiment directory to work around a stop.
-
-Optional free local recovery/preparation:
-`python outcome-oriented/prediction_experiment.py --prepare`.
-
-If Windows reports `WinError 5`, close programs holding the checkpoint open and
-repeat the same run command. Local file operations now retry brief locks. Keep
-both checkpoint files: **do not delete `state.json` or `state.tmp`**. Saved retrieval
-responses are reused on resume.
+The old 76 + 8 comparison is insufficient. The 68.5% versus 80% positive-article
+rates do not establish improvement. Failed/unresolved articles are not negatives.
+No further query optimization or historical outcome resolution follows this run.

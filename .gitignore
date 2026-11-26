@@ -224,3 +224,6 @@ outcome-oriented/prediction_sample/articles/**
 outcome-oriented/prediction_sample/experiment*/
 outcome-oriented/prediction_sample/extraction*/checkpoint.json
 outcome-oriented/prediction_sample/extraction*/checkpoint.tmp
+
+# Independent fresh experiment: private article text and request evidence.
+outcome-oriented/prediction_sample/fresh/

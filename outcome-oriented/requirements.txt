@@ -1,0 +1,2 @@
+python-dotenv==1.2.1
+impresso==0.9.20

@@ -94,7 +94,7 @@ def load_state(path):
     except ValueError as error:
         raise ValueError("Temporary checkpoint is incomplete. Both files retained; inspect before resuming") from error
     if current is not None:
-        for key in ("version", "round_id", "config", "paths", "original_seeds"):
+        for key in ("version", "round_id", "config", "original_seeds"):
             if candidate.get(key) != current.get(key):
                 raise ValueError("Temporary checkpoint conflicts with this experiment; both files retained")
         for ledger, evidence_key in (("llm", "response"), ("retrieval", "raw")):
@@ -277,38 +277,8 @@ def library_ids(state):
     return set(state.get("library_baseline", state["baseline"]))
 
 
-def apply_scope(state, maximum=100, comparison=24):
-    """Bound total article work, preserving attempted work and unseen exclusions."""
-    if not 0 < comparison < maximum:
-        raise ValueError("comparison-articles must be positive and smaller than max-articles")
-    settings = state["settings"]
-    if settings.get("max_articles") == maximum and settings.get("comparison_articles") == comparison:
-        return
-    if state["stage"] != "baseline":
-        raise ValueError("Article scope can only change before baseline calibration")
-    library = state.setdefault("library_baseline", copy.deepcopy(state["baseline"]))
-    required = set(library) & (set(state["extractions"]) | set(state["reviews"]))
-    target = min(len(library), maximum - comparison)
-    if len(required) > target:
-        raise ValueError("Already attempted articles exceed the requested baseline allowance; "
-                         "increase max-articles or reduce comparison-articles to retain paid work")
-    selected = sorted(required)
-    order = ex.pilot_order(library)
-    languages = sorted({a["language"] for a in library.values()})
-    queues = {language: [cid for cid in order if library[cid]["language"] == language and
-                        cid not in required] for language in languages}
-    while len(selected) < target:
-        for language in languages:
-            if queues[language] and len(selected) < target:
-                selected.append(queues[language].pop(0))
-    before = list(state["baseline"])
-    state["baseline"] = {cid: library[cid] for cid in selected}
-    state.setdefault("scope_changes", []).append(dict(
-        reason="User-requested bounded article sample; preserve all attempted work",
-        before_baseline_ids=before, after_baseline_ids=selected,
-        retained_attempted_ids=sorted(required), max_articles=maximum, comparison_articles=comparison))
-    settings.update(max_articles=maximum, comparison_articles=comparison,
-                    per_query=min(settings["per_query"], math.ceil(comparison / 12)))
+def already_seen_ids(state):
+    return library_ids(state) | {r["article_id"] for r in state["excluded"]}
 
 
 def recover_saved_reviews(state):
@@ -328,6 +298,68 @@ def recover_saved_reviews(state):
         if row.get("ledger_key") in state["llm"]:
             state["llm"][row["ledger_key"]].update(status="completed", result=result,
                 validation_recovery=row["validation_recovery"])
+
+
+def extend_comparison(state, baseline_target, refined_target):
+    """Additive, idempotent scope migration; never discard paid or frozen evidence."""
+    if min(baseline_target, refined_target) < 1:
+        raise ValueError("Cohort targets must be positive")
+    settings = state["settings"]
+    if settings.get("baseline_target") == baseline_target and settings.get("comparison_articles") == refined_target:
+        return
+    library = state.setdefault("library_baseline", copy.deepcopy(state["baseline"]))
+    before = sorted(state["baseline"])
+    selected = (set(before) if "max_articles" in settings else set())
+    selected |= set(library) & (set(state["extractions"]) | set(state["reviews"]))
+    order = ex.pilot_order(library)
+    # Fill the least represented language first, retaining all previous selections.
+    while len(selected) < min(baseline_target, len(library)):
+        counts = {lang: sum(library[c]["language"] == lang for c in selected)
+                  for lang in {a["language"] for a in library.values()}}
+        available = [c for c in order if c not in selected]
+        cid = min(available, key=lambda c: counts[library[c]["language"]])
+        selected.add(cid)
+    state["baseline"] = {c: library[c] for c in sorted(selected)}
+    state.setdefault("scope_changes", []).append(dict(
+        migration="per-cohort-v1", before_baseline_ids=before,
+        after_baseline_ids=sorted(selected), previous_settings=copy.deepcopy(settings),
+        baseline_target=baseline_target, refined_target=refined_target,
+        reason="At least the requested eligible articles per cohort; retain compatible paid work"))
+    settings.update(baseline_target=baseline_target, comparison_articles=refined_target,
+                    max_articles=baseline_target + refined_target,
+                    per_query=max(settings["per_query"], math.ceil(refined_target / 12)))
+    if state.get("method_fingerprint") and state.get("query_version"):
+        state.setdefault("comparison_round_id", state["round_id"] + "-extension")
+        state.pop("retrieval_round_dir", None)
+        state["stage"] = "extension"
+        state["retrieval_done"] = False
+
+
+def recover_saved_extractions(state):
+    """Validate saved rows or detached ledger responses without making requests."""
+    articles = {**state.get("library_baseline", state["baseline"]), **state.get("refined_articles", {})}
+    for cid, article in articles.items():
+        key = ex.digest(request_for(article, state["config"]))
+        row = state["extractions"].get(cid)
+        if row is None and key in state["llm"]:
+            row = dict(state["llm"][key], ledger_key=key, article=article)
+            state["extractions"][cid] = row
+        if not row or "response" not in row:
+            continue
+        try:
+            row["result"] = validate_extraction(row["response"], article)
+            row["status"] = "completed"
+        except ValueError as error:
+            row.update(status="error", error=str(error))
+            row.pop("result", None)
+    # A crash can leave a raw review only in the request ledger.
+    for cid, extraction in state["extractions"].items():
+        if "result" not in extraction:
+            continue
+        key = ex.digest(request_for(extraction["article"], state["review_config"], extraction["result"]))
+        if cid not in state["reviews"] and key in state["llm"]:
+            state["reviews"][cid] = dict(state["llm"][key], ledger_key=key, status="pending")
+    recover_saved_reviews(state)
 
 
 def request_for(article, config, extraction=None):
@@ -399,64 +431,73 @@ def call(state, path, request, config, budget, validator):
     return dict(row, ledger_key=key)
 
 
-def _process_articles(state, path, articles, budget):
-    for cid in ex.pilot_order(articles):
-        article = articles[cid]
-        record = state["extractions"].get(cid)
-        if record and article_signature(record["article"]) != article_signature(article):
-            raise ValueError(f"Cached article content/date/language changed: {cid}")
-        if record and "response" in record:
-            # Recover any usable response, even previously marked error/pending.
-            try:
-                record["result"] = validate_extraction(record["response"], article)
-            except ValueError as error:
-                record.update(status="error", error=str(error))
-                raise SavedEvidenceInvalid(str(error)) from error
-            record["status"] = "completed"
-            if "ledger_key" in record:
-                record = call(state, path, request_for(article, state["config"]), state["config"],
-                    budget, lambda raw: validate_extraction(raw, article))
-                record["article"] = article
-                state["extractions"][cid] = record
-        elif record:
-            raise ValueError(f"Extraction {cid} has an uncertain saved attempt; no automatic retry")
-        else:
-            print(f"Extract {cid}", flush=True)
-            request = request_for(article, state["config"])
-            try:
-                record = call(state, path, request, state["config"], budget,
-                              lambda raw: validate_extraction(raw, article))
-            finally:
-                key = ex.digest(request)
-                if key in state["llm"]:
-                    state["extractions"][cid] = dict(state["llm"][key], ledger_key=key, article=article)
+def process_article(state, path, article, budget):
+    cid = article["article_id"]
+    record = state["extractions"].get(cid)
+    if record and article_signature(record["article"]) != article_signature(article):
+        raise ValueError(f"Cached article content/date/language changed: {cid}")
+    if record and "response" in record:
+        # Recover any usable response, even previously marked error/pending.
+        try:
+            record["result"] = validate_extraction(record["response"], article)
+        except ValueError as error:
+            record.update(status="error", error=str(error))
+            raise SavedEvidenceInvalid(str(error)) from error
+        record["status"] = "completed"
+        if "ledger_key" in record:
+            record = call(state, path, request_for(article, state["config"]), state["config"],
+                budget, lambda raw: validate_extraction(raw, article))
             record["article"] = article
-        request = request_for(article, state["review_config"], record["result"])
-        review_key = ex.digest(request)
-        if state["reviews"].get(cid, {}).get("ledger_key") != review_key:
-            print(f"Review {cid}", flush=True)
-            try:
-                call(state, path, request, state["review_config"], budget,
-                     lambda raw: validate_review(raw, article, record["result"]))
-            finally:
-                if review_key in state["llm"]:
-                    state["reviews"][cid] = dict(state["llm"][review_key], ledger_key=review_key)
-        elif state["reviews"][cid].get("status") != "completed":
-            # A raw response saved before interruption can be recovered locally.
-            recovered = call(state, path, request, state["review_config"], budget,
-                lambda raw: validate_review(raw, article, record["result"]))
-            state["reviews"][cid] = recovered
-        save(path, state)
-
+            state["extractions"][cid] = record
+    elif record:
+        raise ValueError(f"Extraction {cid} has an uncertain saved attempt; no automatic retry")
+    else:
+        print(f"Extract {cid}", flush=True)
+        request = request_for(article, state["config"])
+        try:
+            record = call(state, path, request, state["config"], budget,
+                          lambda raw: validate_extraction(raw, article))
+        finally:
+            key = ex.digest(request)
+            if key in state["llm"]:
+                state["extractions"][cid] = dict(state["llm"][key], ledger_key=key, article=article)
+        record["article"] = article
+    request = request_for(article, state["review_config"], record["result"])
+    review_key = ex.digest(request)
+    if state["reviews"].get(cid, {}).get("ledger_key") != review_key:
+        print(f"Review {cid}", flush=True)
+        try:
+            call(state, path, request, state["review_config"], budget,
+                 lambda raw: validate_review(raw, article, record["result"]))
+        finally:
+            if review_key in state["llm"]:
+                state["reviews"][cid] = dict(state["llm"][review_key], ledger_key=review_key)
+    elif state["reviews"][cid].get("status") != "completed":
+        # A raw response saved before interruption can be recovered locally.
+        recovered = call(state, path, request, state["review_config"], budget,
+            lambda raw: validate_review(raw, article, record["result"]))
+        state["reviews"][cid] = recovered
+    save(path, state)
 
 def process(state, path, articles, budget):
     for cid in ex.pilot_order(articles):
+        uncertain = [state[stage][cid] for stage in ("extractions", "reviews")
+                     if cid in state[stage] and state[stage][cid].get("status") == "pending"
+                     and "response" not in state[stage][cid]]
+        if uncertain:
+            state.setdefault("unresolved_articles", {})[cid] = dict(
+                reason="Saved request without a response; skipped without replay",
+                ledger_keys=[r.get("ledger_key") for r in uncertain],
+                decision_source="automated_safety_guard")
+            print(f"Skip uncertain request for {cid}; reservation retained, no replay.", flush=True)
+            save(path, state)
+            continue
         try:
-            _process_articles(state, path, {cid: articles[cid]}, budget)
+            process_article(state, path, articles[cid], budget)
         except SavedEvidenceInvalid:
             print(f"Unresolved saved evidence for {cid}; retained without a paid retry. Continuing.", flush=True)
             save(path, state)
-            # Budget stops and uncertain requests use plain ValueError and still stop.
+            # Budget stops and newly failed requests still stop the runner.
 
 
 def human_decisions(state, output):
@@ -516,6 +557,8 @@ def claims(state, cid, humans):
 
 
 def usable(state, cid, humans):
+    if state["extractions"].get(cid, {}).get("status") != "completed":
+        return False
     review = state["reviews"].get(cid, {})
     if review.get("status") != "completed":
         return False
@@ -747,6 +790,10 @@ class RetrievalLimitReached(ValueError):
     """A known local cap, as opposed to an uncertain remote request."""
 
 
+class UncertainRetrieval(ValueError):
+    """Existing reservation without a saved response; that query must be skipped."""
+
+
 def canonical_filter(value):
     """SDK TermSets use hash-randomized set repr; preserve their boolean metadata."""
     if value is None or type(value) in (str, int, float, bool):
@@ -786,7 +833,7 @@ class RetrievalCache:
             save(self.path, self.state)
         row = entries[key]
         if row["status"] != "completed":
-            raise ValueError("Uncertain Impresso request; automatic replay disabled")
+            raise UncertainRetrieval("Uncertain Impresso request; automatic replay disabled")
         # sample_query shuffles hits in-place: never mutate the persisted response.
         return SimpleNamespace(raw=copy.deepcopy(row["raw"]), total=row["total"])
 
@@ -803,67 +850,114 @@ class RetrievalCache:
                            lambda: (self.client.content_items.get(cid).raw, None))
 
 
+def impresso_client(token):
+    """The pinned SDK retries internally by default; one reservation = one attempt."""
+    from impresso.client import ImpressoClient
+    from impresso.util import retry
+    if not hasattr(retry, "MAX_ATTEMPTS"):
+        raise ValueError("Unsupported Impresso retry configuration; use the pinned dependency")
+    retry.MAX_ATTEMPTS = 1
+    return ImpressoClient(api_url="https://dev.impresso-project.ch/public-api/v1", api_bearer_token=token)
+
+
 def retrieve(state, path, sample, output):
     import download_articles as dl
-    from impresso.client import ImpressoClient
     from impresso_prediction_seed_queries import iter_queries
     if (dl.PAGE_SIZE, dl.RESULT_WINDOW, dl.MAX_PAGES_PER_QUERY) != tuple(
             state["settings"][key] for key in ("page_size", "result_window", "max_pages_per_query")):
         raise ValueError("Frozen retrieval sampling settings changed")
     if ex.digest(SEEDS.read_text(encoding="utf-8")) != state["query_version"]:
         raise ValueError("Active queries differ from approved version")
-    round_dir = sample / "rounds" / state["round_id"]
+    round_name = state.get("comparison_round_id", state["round_id"])
+    round_dir = sample / "rounds" / round_name
     round_dir.mkdir(parents=True, exist_ok=True)
     state["retrieval_round_dir"] = str(round_dir.resolve())
     # Preserve the same provenance convention as existing rounds, plus query version.
     snapshot = round_dir / "seed_queries.py"
     if not snapshot.exists():
         snapshot.write_text(SEEDS.read_text(encoding="utf-8"), encoding="utf-8")
-    save(round_dir / "settings.json", dict(state["settings"], languages=list(dl.LANGUAGES),
+    settings_path = round_dir / ("extension-settings.json" if state.get("scope_changes", [{}])[-1].get("migration") == "per-cohort-v1" else "settings.json")
+    save(settings_path, dict(state["settings"], languages=list(dl.LANGUAGES),
         page_size=dl.PAGE_SIZE, result_window=dl.RESULT_WINDOW, max_pages_per_query=dl.MAX_PAGES_PER_QUERY,
         query_version=state["query_version"], years="all", order_by="id"))
     # SDK connection is delayed until after both human gates; credentials come from .env/SDK.
     token = os.environ.get("IMPRESSO_API_TOKEN")
     if not token:
         raise ValueError("Set IMPRESSO_API_TOKEN in repository .env; no interactive token prompts")
-    client = RetrievalCache(state, path, ImpressoClient(
-        api_url="https://dev.impresso-project.ch/public-api/v1", api_bearer_token=token))
+    client = RetrievalCache(state, path, impresso_client(token))
     usage = dl.UsageCounter()
     refs = state.setdefault("refined_references", [])
-    already_seen = library_ids(state)
-    for language in dl.LANGUAGES:
-        for family, kwargs in iter_queries(language):
-            qid = f"{language}.{family}"
-            selected = {r["article_id"] for r in refs if r["query_id"] == qid and
-                        r["article_id"] not in already_seen}
-            if len(selected) >= state["settings"]["per_query"]:
+    already_seen = already_seen_ids(state)
+    # Each stream advances by ONE hit per turn. Neither a sparse query nor a
+    # language can exhaust the whole fetch allowance before others are visited.
+    noop = SimpleNamespace(record=lambda *args: None)
+    streams = {}
+    paused = {}
+    quotas = {}
+    selected = {}
+    seen = {}
+    for family_index in range(len(state.get("query_families", [None] * 4))):
+        for language in dl.LANGUAGES:
+            queries = list(iter_queries(language))
+            if family_index >= len(queries):
                 continue
-            rng = random.Random(f"{state['settings']['seed']}:{qid}")
-            seen = {r["article_id"] for r in state["retrieval_excluded"] if r["query_id"] == qid}
-            # UsageCounter is updated only on uncached calls, below; do not double count replay.
-            noop = SimpleNamespace(record=lambda *args: None)
-            for hit in dl.sample_query(client, noop, kwargs, rng, qid):
-                cid = hit["id"]
-                if cid in seen or any(r["query_id"] == qid and r["article_id"] == cid for r in refs):
-                    continue
-                seen.add(cid)
-                if (cid not in already_seen and cid not in state["refined"] and
-                        len(state["refined"]) >= state["settings"].get("comparison_articles", 24)):
-                    raise RetrievalLimitReached("Fresh comparison article cap reached")
-                status = dl.save_article(client, noop, hit, sample / "articles", state["settings"]["min_chars"])
-                if status is None or status == "too_short_or_redacted":
-                    state["retrieval_excluded"].append(dict(article_id=cid, query_id=qid, reason=status or "unavailable"))
-                    save(path, state)
-                    continue
-                refs.append(dict(round=state["round_id"], query_id=qid, language=language, family=family,
-                                 query_version=state["query_version"], article_id=cid))
-                state["refined_all"] = sorted({r["article_id"] for r in refs})
-                state["refined"] = sorted(set(state["refined_all"]) - already_seen)
+            family, kwargs = queries[family_index]
+            qid = f"{language}.{family}"
+            selected[qid] = {r["article_id"] for r in refs if r["query_id"] == qid and
+                             r["article_id"] not in already_seen}
+            seen[qid] = {r["article_id"] for r in state["retrieval_excluded"] if r["query_id"] == qid}
+            quotas[qid] = state["settings"]["per_query"]
+            pool = streams if len(selected[qid]) < quotas[qid] else paused
+            pool[qid] = (language, family, iter(dl.sample_query(client, noop, kwargs,
+                random.Random(f"{state['settings']['seed']}:{qid}"), qid)))
+    while (streams or paused) and len(state["refined"]) < state["settings"].get("comparison_articles", 100):
+        if not streams:
+            # Exhaust the equal allocation before sharing shortfalls one per cell.
+            # No new seed, query revision, sampling window or extra page is added.
+            streams, paused = paused, {}
+            for qid in streams:
+                quotas[qid] = len(selected[qid]) + 1
+        for qid in list(streams):
+            language, family, stream = streams[qid]
+            try:
+                hit = next(stream)
+            except StopIteration:
+                del streams[qid]
+                continue
+            except UncertainRetrieval as error:
+                state.setdefault("unresolved_queries", {})[qid] = dict(
+                    reason=str(error), decision_source="automated_safety_guard",
+                    action="Skipped query; uncertain reservation retained, no replay")
+                del streams[qid]
                 save(path, state)
-                if cid not in already_seen:
-                    selected.add(cid)
-                if len(selected) >= state["settings"]["per_query"]:
-                    break
+                continue
+            cid = hit["id"]
+            if cid in seen[qid] or any(r["query_id"] == qid and r["article_id"] == cid for r in refs):
+                continue
+            seen[qid].add(cid)
+            # The saved audit found every fetched private-domain transcript redacted.
+            # This availability screen does not change the approved query definitions.
+            if cid in already_seen:
+                status = "reused" if cid in library_ids(state) else "original_unavailable_already_seen"
+            elif (hit.get("access") or {}).get("dataDomain") == "prt":
+                status = "private_search_metadata"
+            else:
+                status = dl.save_article(client, noop, hit, sample / "articles", state["settings"]["min_chars"])
+            if status not in ("saved", "reused"):
+                state["retrieval_excluded"].append(dict(article_id=cid, query_id=qid, reason=status or "unavailable"))
+                save(path, state)
+                continue
+            refs.append(dict(round=round_name, query_id=qid, language=language, family=family,
+                             query_version=state["query_version"], article_id=cid))
+            state["refined_all"] = sorted({r["article_id"] for r in refs})
+            state["refined"] = sorted(set(state["refined_all"]) - already_seen)
+            save(path, state)
+            if cid not in already_seen:
+                selected[qid].add(cid)
+            if len(selected[qid]) >= quotas[qid]:
+                paused[qid] = streams.pop(qid)
+            if len(state["refined"]) >= state["settings"].get("comparison_articles", 100):
+                break
     state["retrieval_done"] = True
     # Charge repository successful-usage counts once per cached request. This local
     # counter is informational; the pre-call experiment reservations enforce limits.
@@ -874,15 +968,110 @@ def retrieve(state, path, sample, output):
             usage.record(row["kind"], len(row["raw"].get("data", [])) if row["kind"] == "search_results" else 1)
 
 
+def export_tables(state, output, humans, articles):
+    """Accepted tables contain only P; review tables retain every candidate."""
+    def write(name, rows, fields):
+        import io
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+        temporary = (output / name).with_suffix(".tmp")
+        ex.retry_file_operation(lambda: temporary.write_text(buffer.getvalue(), encoding="utf-8"))
+        ex.retry_file_operation(lambda: temporary.replace(output / name))
+    fields = ["article_id", "publication_date", "language", "prediction_id", "quote", "statement",
+              "origin", "automated_judgment", "human_override", "decision_source", "effective_decision",
+              "distinct", "usable_review", "included_in_totals", "evidence_status", "reason", "evidence_error"]
+    coverage_fields = ["article_id", "publication_date", "language", "extraction_status", "review_status",
+                       "usable_review", "accepted_distinct_predictions", "article_human_override", "error"]
+    candidate_counts = {}
+    for name, ids in (("initial", state["baseline"]), ("refined", state["refined"])):
+        cases, coverage = [], []
+        for cid in sorted(set(ids)):
+            article = articles[cid]
+            extraction = state["extractions"].get(cid, {})
+            review = state["reviews"].get(cid, {})
+            usable_review = usable(state, cid, humans)
+            rows = claims(state, cid, humans)
+            if not rows:
+                # Preserve unreviewed and invalid original candidates for inspection.
+                candidates = extraction.get("result", {}).get("predictions", [])
+                if not candidates and "response" in extraction:
+                    try:
+                        candidates = unpack(extraction["response"]).get("predictions", [])
+                    except (ValueError, AttributeError):
+                        pass
+                rows = [dict(prediction=p, origin="original", id=f"{cid}:p{i+1}", decision="unreviewed",
+                             effective_decision="flag", distinct=False, decision_source="automated",
+                             reason="No usable independent review", evidence_error=extraction.get("error", ""))
+                        for i, p in enumerate(candidates)]
+            for row in rows:
+                claim = row["prediction"]
+                quote = claim["quote"]
+                evidence_error = row.get("evidence_error", "")
+                if len(quote) > 600 or quote not in article["text"]:
+                    evidence_error = evidence_error or "Unsupported quotation; raw candidate retained in JSON evidence"
+                    quote = ""
+                included = usable_review and row["effective_decision"] == "accept" and row["distinct"] and not evidence_error
+                cases.append(dict(article_id=cid, publication_date=article["date"], language=article["language"],
+                    prediction_id=row["id"], quote=quote, statement=claim["statement"], origin=row["origin"],
+                    automated_judgment=row["decision"], human_override=humans.get(row["id"], ""),
+                    decision_source=row["decision_source"], effective_decision=row["effective_decision"],
+                    distinct=row["distinct"], usable_review=usable_review, included_in_totals=included,
+                    evidence_status="unsupported_raw" if evidence_error else "validated",
+                    reason=row["reason"], evidence_error=evidence_error))
+            accepted = sum(r["included_in_totals"] for r in cases if r["article_id"] == cid)
+            coverage.append(dict(article_id=cid, publication_date=article["date"], language=article["language"],
+                extraction_status=extraction.get("status", "unattempted"), review_status=review.get("status", "unattempted"),
+                usable_review=usable_review, accepted_distinct_predictions=accepted if usable_review else "",
+                article_human_override=humans.get(cid, ""), error=extraction.get("error", review.get("error", ""))))
+        write(f"{name}_predictions.csv", [r for r in cases if r["included_in_totals"]], fields)
+        write(f"{name}_review_cases.csv", cases, fields)
+        write(f"{name}_articles.csv", coverage, coverage_fields)
+        candidate_counts[name] = {f"{origin}_{status}": sum(r["origin"] == origin and r["evidence_status"] == status for r in cases)
+                                 for origin in ("original", "discovered") for status in ("validated", "unsupported_raw")}
+    return candidate_counts
+
+
+def availability_audit(state):
+    """Local evidence only; metadata is a screen, not proof of text availability."""
+    from collections import Counter
+    fetches = [r for r in state["retrieval"].values() if r["kind"] == "item_fetches" and "raw" in r]
+    hits = {h["id"]: h for r in state["retrieval"].values() if r["kind"] == "search_results" and "raw" in r
+            for h in r["raw"].get("data", [])}
+    fetched_ids = {r["params"] for r in fetches}
+    candidates = [h for cid, h in hits.items() if cid not in already_seen_ids(state) and
+                  cid not in fetched_ids and (h.get("access") or {}).get("dataDomain") == "pbl" and
+                  (h.get("text") or {}).get("itemType") in (None, "ar", "article")]
+    return dict(fetched=len(fetches), fetched_redacted=sum("[REDACTED]" in
+        ((r["raw"].get("text") or {}).get("content") or "") for r in fetches),
+        fetched_access=dict(Counter((r["raw"].get("access") or {}).get("dataDomain", "unknown") for r in fetches)),
+        cached_search_unique_hits=len(hits), cached_unfetched_public_article_candidates=len(candidates),
+        public_candidates_by_language=dict(Counter((h.get("text") or {}).get("langCode", "unknown") for h in candidates)),
+        note="Search snippets are not transcripts. Private hits are skipped based on the saved redaction audit; public metadata does not guarantee eligibility.")
+
+
 def report(state, output):
     humans = {**state.get("human_snapshot", {}), **human_decisions(state, output)}
     articles = dict(state["baseline"])
     articles.update({cid: r["article"] for cid, r in state["extractions"].items()})
     articles.update(state.get("refined_articles", {}))
+    missing = set(state["refined_all"]) - set(articles)
+    if missing:
+        # A retrieval interruption may occur before the final source freeze.
+        # Render already saved article coverage locally without another download.
+        available, _ = inventory(Path(state["paths"]["sample"]), state["settings"]["min_chars"])
+        if not missing <= set(available):
+            raise ValueError("Retrieved source files missing; restore private article JSONs before reporting")
+        articles.update({cid: available[cid] for cid in missing})
     cohorts = dict(baseline=list(state["baseline"]), refined_unseen=state["refined"],
-                   refined_all=state["refined_all"])
-    data = {name: metrics(state, ids, humans, len(state["excluded"]) if name == "baseline" else
-        len({r["article_id"] for r in state["retrieval_excluded"]})) for name, ids in cohorts.items()}
+                   refined_all=state["refined_all"], overall=sorted(set(state["baseline"]) | set(state["refined"])))
+    candidate_counts = export_tables(state, output, humans, articles)
+    original_excluded = {r["article_id"] for r in state["excluded"]}
+    retrieval_excluded = {r["article_id"] for r in state["retrieval_excluded"]}
+    data = {name: metrics(state, ids, humans, len((original_excluded if name == "baseline" else
+        original_excluded | retrieval_excluded if name == "overall" else retrieval_excluded) - set(ids)))
+        for name, ids in cohorts.items()}
     breakdown = {}
     for name, ids in cohorts.items():
         languages = sorted({articles[cid]["language"] for cid in ids if cid in articles})
@@ -891,6 +1080,8 @@ def report(state, output):
         refs = state["baseline_associations"] if name == "baseline" else {
             cid: [f"{r['round']}/{r['query_version'][:12]}/{r['query_id']}" for r in
                   state.get("refined_references", []) if r["article_id"] == cid] for cid in ids}
+        if name == "overall":
+            refs = {cid: sorted(set(refs.get(cid, [])) | set(state["baseline_associations"].get(cid, []))) for cid in ids}
         breakdown[name]["query"] = {q: metrics(state, [cid for cid in ids if q in refs.get(cid, [])], humans)
             for q in sorted({q for cid in ids for q in refs.get(cid, [])})}
         version_members = {}
@@ -920,6 +1111,10 @@ def report(state, output):
     delta = None if baseline["A_over_N"] is None or refined["A_over_N"] is None else (
         refined["A_over_N"]-baseline["A_over_N"])*100
     result = dict(stage=state["stage"], statistics=data, breakdown=breakdown, costs=costs(state),
+        candidate_counts=candidate_counts,
+        availability_audit=availability_audit(state), limit_changes=state.get("limit_changes", []),
+        unresolved_queries=state.get("unresolved_queries", {}),
+        unresolved_articles=state.get("unresolved_articles", {}),
         overlap=len(set(state["refined_all"]) & library_ids(state)),
         eligible_library=len(library_ids(state)), deferred_eligible=len(library_ids(state)-set(state["baseline"])),
         positive_article_rate_difference_pp=delta, exclusions=state["excluded"],
@@ -943,6 +1138,7 @@ def report(state, output):
         for cid, a in state["baseline"].items()}, exclusions=state["excluded"], config=state["config"]))
     save(output / "scope-changes.json", state.get("scope_changes", []))
     save(output / "library-manifest.json", dict(article_ids=sorted(library_ids(state)),
+        already_seen_ids=sorted(already_seen_ids(state)),
         deferred_article_ids=sorted(library_ids(state)-set(state["baseline"])),
         note="All frozen library IDs are already seen and cannot fill the fresh quota. Deferred is not excluded or negative."))
     save(output / "refined-manifest.json", dict(primary_unseen=state["refined"], all=state["refined_all"],
@@ -956,14 +1152,21 @@ def report(state, output):
             writer = csv.DictWriter(file, fieldnames=fields)
             writer.writeheader()
             writer.writerows(state.get("refined_references", []))
-    provisional = state["stage"] != "complete" or any(m["N"] != m["eligible"] for m in data.values())
+    target = state["settings"].get("baseline_target", 100)
+    refined_target = state["settings"].get("comparison_articles", 100)
+    adequate_size = baseline["eligible"] >= target and refined["eligible"] >= refined_target
+    result["cohort_targets"] = dict(initial=target, refined=refined_target)
+    result["cohort_shortfalls"] = dict(initial=max(0, target-baseline["eligible"]),
+                                       refined=max(0, refined_target-refined["eligible"]))
+    provisional = not adequate_size or state["stage"] != "complete" or any(m["N"] != m["eligible"] for m in data.values())
     lines = [f"# Bounded prediction experiment — {state['stage']}", "",
-        "LLM-reviewed statistics; limited human spot-checking. " + ("Provisional: incomplete experiment or usable review coverage."
+        "LLM-reviewed with limited human validation. " + ("Provisional: incomplete cohort size or usable review coverage."
             if provisional else "Bounded experiment complete."), "",
         "| Cohort | Eligible | Extracted | N | A | P | A/N | P/A | P/N | Failed | Unresolved | Excluded |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for name, m in data.items():
-        values = [name] + [str(m[k]) if m[k] is not None else "n/a" for k in
+        values = [name] + ["n/a" if m[k] is None else f"{m[k]:.1%}" if k == "A_over_N" else
+            f"{m[k]:.2f}" if k in ("P_over_A", "P_over_N") else str(m[k]) for k in
             ("eligible", "extracted", "N", "A", "P", "A_over_N", "P_over_A", "P_over_N", "failed", "unresolved", "excluded")]
         lines.append("| " + " | ".join(values) + " |")
     proposed = read(output / "query-approval.json", {})
@@ -974,13 +1177,14 @@ def report(state, output):
         r["article_id"] not in library_ids(state)})) for lang in ("fr", "de", "en") for family in families}
     result["shortfalls"] = shortfalls
     save(output / "report.json", result)
-    lines += ["", f"Positive article yield difference: {delta if delta is not None else 'n/a'} percentage points.",
+    lines += ["", f"Descriptive positive article yield difference: {format(delta, '.2f') if delta is not None else 'n/a'} percentage points.",
         f"Scope: {len(state['baseline'])} baseline and up to {state['settings'].get('comparison_articles', 24)} fresh articles; "
         f"{result['deferred_eligible']} eligible library articles deferred, not negative or unavailable.",
         f"Overlap: {result['overlap']} articles (excluded from primary unseen cohort).",
         f"Costs/tokens/reservations: {json.dumps(result['costs'])}",
         f"Impresso usage/reservations: {json.dumps(result['impresso'])}",
         f"Unseen-article shortfalls per query: {json.dumps(shortfalls)}", "",
+        f"Queries skipped because a request outcome is uncertain: {json.dumps(state.get('unresolved_queries', {}))}", "",
         "N includes only completed usable reviews without unresolved claim flags or human conflicts. "
         "Failed, pending, unreviewed and unresolved articles never become negatives. "
         "P counts distinct accepted claims only in N; discoveries are separate from originals in report.json. "
@@ -989,9 +1193,11 @@ def report(state, output):
         "Language/query breakdowns and original/discovered counts: [report.json](report.json). "
         "Evidence: [review-results.json](review-results.json). "
         "Query rationale and before/after: [query-change.json](query-change.json).", "",
-        "Sampling uses fr/de/en with equal per-query quotas (two by default), five random pages "
+        "Sampling uses fr/de/en with equal per-query quotas, alternating query/language streams, five random pages "
         "within the first 5,000 ID-sorted hits, minimum 200 transcript characters. "
         "Availability, publication/period composition, query overlap and small samples can change yield. "
+        "The extension skips private-domain search hits before fetching, based on the saved redaction audit; "
+        "this availability screen differs from the original retrieval and adds composition bias. "
         "This is a descriptive retrieval comparison, not a causal experiment or a recall estimate. "
         "No historical outcomes were resolved. Human sampling does not validate all automated judgments.", ""]
     lines += ["| Language | Baseline N / A / P | Refined unseen N / A / P |",
@@ -1012,6 +1218,16 @@ def report(state, output):
                   f"additional reviewer discoveries {m['discovered_accepted']}; unreviewed {m['unreviewed']}."]
     query_change = read(output / "query-change.json")
     if query_change:
+        import difflib
+        for key, filename in (("before_source", "seed_queries_original.py"), ("after_source", "seed_queries_revised.py")):
+            snapshot = output / filename
+            if snapshot.exists() and snapshot.read_text(encoding="utf-8") != query_change[key]:
+                raise ValueError("Exported immutable seed snapshot differs")
+            if not snapshot.exists():
+                snapshot.write_text(query_change[key], encoding="utf-8")
+        diff = "".join(difflib.unified_diff(query_change["before_source"].splitlines(True),
+            query_change["after_source"].splitlines(True), fromfile="original", tofile="approved revised"))
+        (output / "query-comparison.diff").write_text(diff, encoding="utf-8")
         lines += ["", "Query change: " + query_change["reason"],
             "Support by language: " + ", ".join(f"{c['language']}: {len(c['support_articles'])} articles"
                 for c in query_change["changes"])]
@@ -1019,11 +1235,17 @@ def report(state, output):
         if provisional or delta is None or sum(shortfalls.values()) or min(baseline["N"], refined["N"]) < 20:
             recommendation = "Evidence insufficient to recommend expansion; retain the revised queries as a pilot only."
         else:
-            recommendation = ("Revised queries look useful enough for a further pilot; retain broader coverage too."
-                if delta >= 0 else "Revised queries reduced observed yield; keep the previous broad query bundle.")
+            recommendation = "Descriptive comparison only; cohort yield differences cannot establish the effect of the revised family."
         lines += ["Recommendation: " + recommendation, "Experiment stopped after one refinement."]
     else:
-        lines += ["Next: run/resume the CLI; complete the named approval packet when prompted."]
+        lines += ["Next: run/resume within explicitly authorized cumulative limits. Existing calibration and query approval are retained."
+                  if state.get("method_fingerprint") else "Next: run/resume the CLI; complete the named approval packet when prompted."]
+    lines += ["", "The previous 68.5% versus 80% rates do not establish improvement: the eight fresh articles "
+              "came from unchanged families, with no English articles and no contribution from the revised likelihood family.",
+              "Accepted tables: [initial_predictions.csv](initial_predictions.csv), [refined_predictions.csv](refined_predictions.csv).",
+              "All candidates and coverage: initial_review_cases.csv, refined_review_cases.csv, initial_articles.csv, refined_articles.csv."]
+    if not adequate_size:
+        lines += ["Required cohort sizes have not been reached. This is not the final adequate comparison."]
     if state.get("last_stop"):
         lines += ["", "Last stop: " + state["last_stop"]]
     (output / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1067,11 +1289,12 @@ def preview(state):
         blocked_reviews=sum(r.get("status") in ("pending", "error") for cid, r in state["reviews"].items()
                             if cid in workload and current_review(cid)),
         costs=costs(state), retrieval_limits=state["settings"],
+        availability_audit=availability_audit(state),
         retrieval_work=dict(complete=state.get("retrieval_done", False),
             cached_requests=len(state["retrieval"]), remaining_reserved_capacity=retrieval_remaining,
             intended_unseen_quota_upper=min(12*state["settings"]["per_query"], state["settings"].get("comparison_articles", 24))),
-        comparison_note="At most 100 articles by default: 76 baseline plus up to 24 fresh. Future transcript sizes are unknown. "
-        "Each call is separately reserved under the cumulative cap; no retries. Two human gates."), indent=2))
+        comparison_note="At least 100 eligible articles per cohort by default; compatible completed work is retained. Future transcript sizes are unknown. "
+        "Each call is separately reserved under the cumulative cap; no retries. Existing human approvals are retained."), indent=2))
 
 
 def main(argv=None):
@@ -1086,16 +1309,18 @@ def main(argv=None):
     p.add_argument("--review-input-rate", type=float, default=ex.INPUT_RATE)
     p.add_argument("--review-output-rate", type=float, default=ex.OUTPUT_RATE)
     p.add_argument("--min-chars", type=int, default=200)
-    p.add_argument("--per-query", type=int, default=2)
-    p.add_argument("--max-articles", type=int, default=100, help="Total baseline plus fresh article cap")
-    p.add_argument("--comparison-articles", type=int, default=24, help="Articles reserved for the fresh cohort")
-    p.add_argument("--search-limit", type=int, default=1500, help="Cumulative reserved search result items")
-    p.add_argument("--fetch-limit", type=int, default=300, help="Cumulative reserved article fetches")
+    p.add_argument("--per-query", type=int, default=9)
+    p.add_argument("--initial-articles", type=int, default=100, help="Minimum eligible initial cohort")
+    p.add_argument("--comparison-articles", type=int, default=100, help="Minimum eligible unseen cohort")
+    p.add_argument("--search-limit", type=int, help="Explicit cumulative search reservation cap; otherwise retain saved cap")
+    p.add_argument("--fetch-limit", type=int, help="Explicit cumulative article fetch cap; otherwise retain saved cap")
     arguments = sys.argv[1:] if argv is None else argv
     args = p.parse_args(arguments)
     if any(not math.isfinite(v) or v <= 0 for v in (args.budget_usd, args.review_input_rate, args.review_output_rate)):
         p.error("Budget and token prices must be positive finite numbers")
-    if min(args.min_chars, args.per_query, args.search_limit, args.fetch_limit) < 1:
+    if min(args.min_chars, args.per_query, args.initial_articles, args.comparison_articles,
+           1500 if args.search_limit is None else args.search_limit,
+           300 if args.fetch_limit is None else args.fetch_limit) < 1:
         p.error("Eligibility, sample and retrieval limits must be positive")
     if args.reviewer != "gpt-6-luna" and not all(any(arg == flag or arg.startswith(flag + "=")
         for arg in arguments) for flag in ("--review-input-rate", "--review-output-rate")):
@@ -1103,6 +1328,8 @@ def main(argv=None):
     path = args.output / "state.json"
     state = load_state(path)
     if state is None:
+        args.search_limit = args.search_limit or 1500
+        args.fetch_limit = args.fetch_limit or 300
         state = initial(args)
     else:
         if state.get("version") != 1 or state["review_config"]["schema"] != REVIEW_SCHEMA:
@@ -1111,12 +1338,25 @@ def main(argv=None):
         state.setdefault("round_id", "experiment-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
         if state["config"] != extraction_config(args.min_chars):
             raise ValueError("Frozen extraction methodology changed; do not mix runs")
-        if (state["paths"] != dict(sample=str(args.sample.resolve()), existing=str(args.existing.resolve())) or
-            state["review_config"]["model"] != args.reviewer or
+        if (state["review_config"]["model"] != args.reviewer or
             state["review_config"]["input_rate"] != args.review_input_rate or
             state["review_config"]["output_rate"] != args.review_output_rate):
-            raise ValueError("Frozen paths/reviewer/pricing differ from CLI")
-    apply_scope(state, args.max_articles, args.comparison_articles)
+            raise ValueError("Frozen reviewer/pricing differ from CLI")
+    # Runtime locations are relocatable. Article hashes and method config remain frozen.
+    state["paths"] = dict(sample=str(args.sample.resolve()), existing=str(args.existing.resolve()))
+    if state.get("retrieval_round_dir"):
+        state["retrieval_round_dir"] = str((args.sample / "rounds" / state.get("comparison_round_id", state["round_id"])).resolve())
+    for flag in ("search_limit", "fetch_limit"):
+        value = getattr(args, flag)
+        if value is not None and value != state["settings"][flag]:
+            state.setdefault("limit_changes", []).append(dict(
+                setting=flag, before=state["settings"][flag], after=value,
+                authorization="Explicit CLI limit"))
+            state["settings"][flag] = value
+            if state["stage"] == "shortfall":
+                state["stage"] = "extension"
+    extend_comparison(state, args.initial_articles, args.comparison_articles)
+    recover_saved_extractions(state)
     preview(state)
     if not args.run and not args.prepare:
         return
@@ -1133,6 +1373,14 @@ def main(argv=None):
         if old_manifest.exists() and not archive.exists() and set(read(old_manifest)["articles"]) != set(state["baseline"]):
             save(archive, read(old_manifest))
         recover_saved_reviews(state)
+        history = args.output / "history/bounded-attempt"
+        if not history.exists() and state.get("scope_changes", [{}])[-1].get("migration") == "per-cohort-v1":
+            history.mkdir(parents=True)
+            # Archive evidence before promoting the additive scope migration.
+            import shutil
+            for source in args.output.iterdir():
+                if source.is_file() and source.suffix in (".json", ".md", ".csv"):
+                    shutil.copyfile(source, history / source.name)
         if not args.run and state["stage"] == "query_approval":
             prepare_query_packet(state, args.output)
             if state.get("last_stop", "").startswith("No accepted predictions"):
@@ -1143,6 +1391,14 @@ def main(argv=None):
             return
         ex.load_dotenv(HERE.parent / ".env", override=True)
         state.pop("last_stop", None)
+        if state["stage"] == "extension":
+            if ex.digest([state["config"], state["review_config"]]) != state["method_fingerprint"]:
+                raise ValueError("Calibrated method changed; cannot extend the comparison")
+            change = read(args.output / "query-change.json", {})
+            if change.get("approve") is not True or change.get("after_fingerprint") != state["query_version"]:
+                raise ValueError("Immutable human query approval missing or inconsistent")
+            process(state, path, state["baseline"], args.budget_usd)
+            state["stage"] = "retrieval"
         if state["stage"] == "baseline":
             process(state, path, state["baseline"], args.budget_usd)
             state["stage"] = "calibration"
@@ -1176,7 +1432,8 @@ def main(argv=None):
                 raise ValueError("Frozen comparison article content changed")
             work = set(state["baseline"]) | set(state["refined"])
             process(state, path, {cid: a for cid, a in frozen.items() if cid in work}, args.budget_usd)
-            state["stage"] = "complete"
+            state["stage"] = ("complete" if len(state["baseline"]) >= args.initial_articles and
+                              len(state["refined"]) >= args.comparison_articles else "shortfall")
         print(f"Stage: {state['stage']}. Report: {args.output / 'report.md'}")
     except (ValueError, OSError) as error:
         state["last_stop"] = str(error)
